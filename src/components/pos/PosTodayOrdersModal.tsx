@@ -144,6 +144,15 @@ export const PosTodayOrdersModal: React.FC<PosTodayOrdersModalProps> = ({ onClos
     setRefundError(null);
 
     try {
+      const refundedOrderId = orderToRefund.id;
+      if (manager?.isRemoteApproved) {
+        setShowPinModal(false);
+        setOrderToRefund(null);
+        await fetchTodayOrders();
+        await handleOpenReceiptReprint(refundedOrderId);
+        return;
+      }
+
       const res = await authFetch(`/api/pos/orders/${orderToRefund.id}/refund`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -166,7 +175,6 @@ export const PosTodayOrdersModal: React.FC<PosTodayOrdersModalProps> = ({ onClos
       }
 
       setShowPinModal(false);
-      const refundedOrderId = orderToRefund.id;
       setOrderToRefund(null);
       await fetchTodayOrders();
 

@@ -18,6 +18,7 @@ import { toast } from "../context/ToastContext";
 import { ConfirmModal } from "./common/ConfirmModal";
 import { CsvImportExport } from "./common/CsvImportExport";
 import { validateSupplierSubmission } from "../utils/syncSanitizers";
+import { normalizeTextCode } from "../utils/genericImport";
 import { motion, AnimatePresence } from "motion/react";
 
 export const Suppliers = () => {
@@ -56,31 +57,40 @@ export const Suppliers = () => {
   };
 
   const handleImportSuppliers = (data: any[]) => {
-    if (isReadOnly) return;
+    if (isReadOnly) return { added: 0, updated: 0, skipped: data.length };
     let importedCount = 0;
     let updatedCount = 0;
+    let skipped = 0;
+    const seenNames = new Set(suppliers.map((s) => s.name.trim().toLowerCase()));
+
     (data || []).forEach((row) => {
       const idSistem = String(row["ID_SISTEM (JANGAN DIUBAH)"] || "").trim();
       const rawName = String(row["Nama Supplier"] || row.name || "").trim();
-      if (!rawName) return;
+      if (!rawName) {
+        skipped++;
+        return;
+      }
 
       const supplierData = {
         name: rawName,
         picName: String(row["Nama PIC"] || row.picName || row.pic || "").trim() || "-",
-        contact: String(row["Kontak"] || row.contact || row.phone || "").trim() || "-",
+        contact: normalizeTextCode(row["Kontak"] ?? row.contact ?? row.phone) || "-",
         address: String(row["Alamat"] || row.address || "").trim() || "-",
         notes: String(row["Catatan"] || row.notes || "").trim(),
       };
 
       const existing = idSistem
         ? suppliers.find((s) => s.id === idSistem)
-        : undefined;
+        : suppliers.find((s) => s.name.trim().toLowerCase() === rawName.toLowerCase());
       if (existing) {
-        updateSupplier({ ...supplierData, id: idSistem });
+        updateSupplier({ ...supplierData, id: existing.id });
         updatedCount++;
-      } else {
+      } else if (!seenNames.has(rawName.toLowerCase())) {
+        seenNames.add(rawName.toLowerCase());
         addSupplier(supplierData);
         importedCount++;
+      } else {
+        skipped++;
       }
     });
     if (importedCount > 0 || updatedCount > 0) {
@@ -90,6 +100,7 @@ export const Suppliers = () => {
     } else {
       toast.warning("Tidak ada data supplier valid yang dapat diimpor.");
     }
+    return { added: importedCount, updated: updatedCount, skipped };
   };
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
@@ -146,37 +157,42 @@ export const Suppliers = () => {
         </div>
 
         {/* Action Controls */}
-        <div className="flex items-center gap-2.5 shrink-0 flex-nowrap">
+        <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
+          <CsvImportExport
+            onImport={handleImportSuppliers}
+            canImport={!isReadOnly}
+            requiredHeaders={["Nama Supplier"]}
+            exportFilename="Daftar_Supplier"
+            exportTitle="Daftar Supplier & Distributor"
+            templateHeaders={["Nama Supplier", "Nama PIC", "Kontak", "Alamat", "Catatan"]}
+            templateExampleRow={["PT Kopi Nikmat", "Budi", "081234567890", "Jl Mawar 1", "Supplier Sirup"]}
+            currentData={suppliers.map((s) => ({
+              id: s.id,
+              "Nama Supplier": s.name,
+              "Nama PIC": s.picName,
+              Kontak: s.contact,
+              Alamat: s.address,
+              Catatan: s.notes,
+            }))}
+            templateFilename="template_supplier"
+            buttonLabel={isReadOnly ? "Ekspor Data" : "Impor / Ekspor"}
+            templateFormats={{
+              Kontak: "text",
+            }}
+            templateHints={{
+              "Nama Supplier": "Wajib diisi",
+              Kontak: "No. HP / WhatsApp (format teks, contoh: 081234567890)",
+            }}
+          />
           {!isReadOnly && (
-            <>
-              <CsvImportExport
-                onImport={handleImportSuppliers}
-                templateHeaders={["Nama Supplier", "Nama PIC", "Kontak", "Alamat", "Catatan"]}
-                templateExampleRow={["PT Kopi Nikmat", "Budi", "0812345678", "Jl Mawar 1", "Supplier Sirup"]}
-                currentData={suppliers.map((s) => ({
-                  id: s.id,
-                  "Nama Supplier": s.name,
-                  "Nama PIC": s.picName,
-                  Kontak: s.contact,
-                  Alamat: s.address,
-                  Catatan: s.notes,
-                }))}
-                templateFilename="template_supplier"
-                buttonLabel="Impor / Ekspor"
-                templateHints={{
-                  "Nama Supplier": "Wajib diisi",
-                  Kontak: "No. HP / WhatsApp, contoh: 081234567890",
-                }}
-              />
-              <button
-                type="button"
-                onClick={() => handleOpenModal()}
-                className="flex items-center justify-center px-4 py-2.5 bg-brand-600 text-white rounded-2xl hover:bg-brand-700 active:scale-[0.98] transition-all shadow-xs text-xs font-bold whitespace-nowrap shrink-0 cursor-pointer"
-              >
-                <Plus className="h-4 w-4 mr-1.5 shrink-0" />
-                Tambah Supplier
-              </button>
-            </>
+            <button
+              type="button"
+              onClick={() => handleOpenModal()}
+              className="flex items-center justify-center px-4 py-2.5 bg-brand-600 text-white rounded-2xl hover:bg-brand-700 active:scale-[0.98] transition-all shadow-xs text-xs font-bold whitespace-nowrap shrink-0 cursor-pointer"
+            >
+              <Plus className="h-4 w-4 mr-1.5 shrink-0" />
+              Tambah Supplier
+            </button>
           )}
         </div>
       </div>

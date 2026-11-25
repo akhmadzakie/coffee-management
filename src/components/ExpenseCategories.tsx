@@ -904,7 +904,7 @@ export function ExpenseCategories() {
   };
 
   const handleImportCategories = (data: any[]) => {
-    if (isReadOnly) return;
+    if (isReadOnly) return { added: 0, updated: 0, skipped: data.length };
     const { toCreate, toUpdate, skipped } = parseImportedExpenseCategories(
       data,
       categories,
@@ -926,6 +926,7 @@ export function ExpenseCategories() {
     } else {
       toast.warning("Tidak ada data kategori valid atau baru yang diimpor.");
     }
+    return { added: toCreate.length, updated: toUpdate.length, skipped };
   };
 
   return (
@@ -955,8 +956,8 @@ export function ExpenseCategories() {
           </p>
         </div>
 
-        {!isReadOnly && (
-          <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
+        <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
+          {!isReadOnly && (
             <button
               type="button"
               onClick={handleRestoreDefaults}
@@ -966,31 +967,51 @@ export function ExpenseCategories() {
               <RotateCcw className="w-3.5 h-3.5 text-amber-600 dark:text-amber-300 shrink-0" />
               <span>Pulihkan Kategori Standar</span>
             </button>
+          )}
 
-            <CsvImportExport
-              onImport={handleImportCategories}
-              templateHeaders={["Nama Kategori", "Tipe", "Warna", "Icon"]}
-              templateExampleRow={["Gaji Karyawan", "HRD", "#8b5cf6", "users"]}
-              currentData={categories.map((c) => ({
+          <CsvImportExport
+            onImport={handleImportCategories}
+            canImport={!isReadOnly}
+            requiredHeaders={["Nama Kategori", "Tipe"]}
+            exportFilename="Daftar_Kategori_Keuangan"
+            exportTitle="Daftar Kategori Kas & Biaya"
+            templateHeaders={["Nama Kategori", "Tipe", "Kategori Induk", "Warna", "Icon"]}
+            templateExampleRow={["Bonus Barista", "HRD", "HRD & Tim", "#8b5cf6", "users"]}
+            currentData={categories.map((c) => {
+              const parent = c.parentId
+                ? categories.find((p) => p.id === c.parentId)
+                : null;
+              return {
                 id: c.id,
                 "Nama Kategori": c.name,
                 Tipe: c.type,
+                "Kategori Induk": parent?.name || "",
                 Warna: c.color,
                 Icon: c.icon,
-              }))}
-              templateFilename="template_kategori_keuangan"
-              buttonLabel="Impor/Ekspor Excel"
-              templateDropdowns={{
-                Tipe: CATEGORY_TYPES.map((t) => t.value),
-              }}
-              templateHints={{
-                "Nama Kategori": "Wajib diisi",
-                Tipe: "Pilih tipe kategori dari dropdown",
-                Warna: "Kode HEX warna, contoh: #8b5cf6",
-                Icon: "Nama icon (misal: users, coffee, tag, wallet, package)",
-              }}
-            />
+              };
+            })}
+            templateFilename="template_kategori_keuangan"
+            buttonLabel={isReadOnly ? "Ekspor Data" : "Impor / Ekspor"}
+            templateDropdowns={{
+              Tipe: CATEGORY_TYPES.map((t) => t.value),
+              "Kategori Induk": categories
+                .filter((c) => !c.parentId)
+                .map((c) => c.name),
+            }}
+            templateFormats={{
+              Warna: "text",
+              Icon: "text",
+            }}
+            templateHints={{
+              "Nama Kategori": "Wajib diisi",
+              Tipe: "Pilih tipe kategori dari dropdown",
+              "Kategori Induk": "Opsional — pilih induk jika ingin membuat sub-kategori",
+              Warna: "Kode HEX warna, contoh: #8b5cf6",
+              Icon: "Nama icon (misal: users, coffee, tag, wallet, package)",
+            }}
+          />
 
+          {!isReadOnly && (
             <button
               type="button"
               onClick={handleAddRoot}
@@ -999,8 +1020,8 @@ export function ExpenseCategories() {
               <Plus className="w-4 h-4 shrink-0" />
               <span>Tambah Kategori</span>
             </button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {/* ─── 4 Bento KPI Cards ────────────────────────────────────────────── */}

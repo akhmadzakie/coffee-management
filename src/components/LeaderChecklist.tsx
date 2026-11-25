@@ -8,10 +8,11 @@ import {
   CheckCircle2, XCircle, Plus, Trash2, RotateCcw, 
   Coffee, Utensils, Croissant, ClipboardList, 
   Sliders, TrendingUp, Check, Sun, Moon, Sunset, Award, Sparkles, Filter,
-  Lock, Edit2, ShieldCheck
+  Lock, Edit2, ShieldCheck, Download
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { DEFAULT_STORE_TIMEZONE, getLocalDateString } from "../utils/dateUtils";
+import { buildStyledWorkbook } from "../utils/excelTemplate";
 import { getWitaTimeMinutes, resolveCanonicalEmployeeId } from "../utils/attendanceRecap";
 import { TaskCategoryGroup, TaskItemDetail, LeaderAllowanceRule, DEFAULT_LEADER_ALLOWANCE_RULES } from "../types";
 import { CustomMonthPicker } from "./common/CustomMonthPicker";
@@ -1094,6 +1095,113 @@ export const LeaderChecklist: React.FC = () => {
     toast.success("Master SOP & jobdesk Leader berhasil disimpan!");
   };
 
+  const handleExportDailyChecklist = async () => {
+    try {
+      await buildStyledWorkbook({
+        filename: `Checklist_Harian_Leader_${selectedDate}`,
+        sheets: [
+          {
+            name: "Ringkasan Harian",
+            title: `Pantauan Checklist Jobdesk Leader (${selectedDate})`,
+            subtitle: `Rata-rata Terlaksana: ${overallPercentage}%`,
+            headers: [
+              "Divisi",
+              "Leader / Petugas",
+              "Status Kirim",
+              "Tugas Selesai",
+              "Total Tugas",
+              "Capaian (%)",
+              "Grade Tunjangan",
+              "Catatan",
+            ],
+            rows: divisionStats.map((d) => [
+              d.label,
+              d.leaderName || "-",
+              d.isSubmitted ? "Sudah Lapor" : "Belum Lapor",
+              d.completedCount,
+              d.totalTasks,
+              (Number(d.percentage) || 0) / 100,
+              `${d.matchedGrade?.grade || "-"} (${d.matchedGrade?.payoutPercentage ?? 0}%)`,
+              d.cleanNotes || "-",
+            ]),
+            columnFormats: [
+              "text",
+              "text",
+              "text",
+              "integer",
+              "integer",
+              "percent",
+              "text",
+              "text",
+            ],
+          },
+        ],
+      });
+      toast.success(`Laporan checklist harian ${selectedDate} berhasil diekspor (.xlsx).`);
+    } catch (err: any) {
+      toast.error("Gagal mengekspor checklist harian: " + (err?.message || err));
+    }
+  };
+
+  const handleExportMonthlyChecklist = async () => {
+    try {
+      const targetDivs = monthlyDivisionStats.filter(
+        (d) => monthlyDivisionFilter === "ALL" || monthlyDivisionFilter === d.key
+      );
+      const dailyDetailRows: any[][] = [];
+      targetDivs.forEach((d: any) => {
+        Object.entries(d.dayRecordsMap || {})
+          .sort(([a], [b]) => a.localeCompare(b))
+          .forEach(([dateKey, rec]: [string, any]) => {
+            dailyDetailRows.push([
+              dateKey,
+              d.label,
+              rec.submitterName || "-",
+              rec.completedCount || 0,
+              (Number(rec.percentage) || 0) / 100,
+              rec.notes || "-",
+            ]);
+          });
+      });
+
+      await buildStyledWorkbook({
+        filename: `Rekap_Checklist_Bulanan_${selectedMonth}`,
+        sheets: [
+          {
+            name: "Rekap Divisi Bulanan",
+            title: `Rekapitulasi Checklist Jobdesk Bulanan (${selectedMonth})`,
+            subtitle: `Total Laporan Masuk: ${totalMonthlySubmissions} • Rata-rata Efektif: ${overallMonthlyScore}%`,
+            headers: [
+              "Divisi",
+              "Jumlah Hari Lapor",
+              "Skor Efektif Bulanan (%)",
+              "Grade",
+              "Hak Tunjangan (%)",
+            ],
+            rows: targetDivs.map((d: any) => [
+              d.label,
+              d.submittedDaysCount ?? Object.keys(d.dayRecordsMap || {}).length,
+              (Number(d.monthlyEffectiveScore) || 0) / 100,
+              d.matchedGrade?.grade || "-",
+              (Number(d.matchedGrade?.payoutPercentage) || 0) / 100,
+            ]),
+            columnFormats: ["text", "integer", "percent", "text", "percent"],
+          },
+          {
+            name: "Riwayat Harian",
+            title: `Detail Laporan Harian Bulan ${selectedMonth}`,
+            headers: ["Tanggal", "Divisi", "Pelapor", "Tugas Selesai", "Capaian (%)", "Catatan"],
+            rows: dailyDetailRows,
+            columnFormats: ["date", "text", "text", "integer", "percent", "text"],
+          },
+        ],
+      });
+      toast.success(`Rekap bulanan ${selectedMonth} berhasil diekspor (.xlsx).`);
+    } catch (err: any) {
+      toast.error("Gagal mengekspor rekap bulanan: " + (err?.message || err));
+    }
+  };
+
   // ─────────────────────────────────────────────────────────────────────────
   // 1. RENDER UNTUK MANAGER & SUPER ADMIN (MONITORING & PENGATUR JOBDESK)
   // ─────────────────────────────────────────────────────────────────────────
@@ -1185,6 +1293,15 @@ export const LeaderChecklist: React.FC = () => {
                     >
                       <TrendingUp className="w-3.5 h-3.5 text-brand-100 shrink-0" />
                       <span>Rekap 1 Bulan</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleExportDailyChecklist}
+                      className="whitespace-nowrap shrink-0 text-xs bg-white/15 hover:bg-white/25 px-2.5 py-1.5 rounded-lg text-white border border-white/25 transition-colors flex items-center gap-1.5 cursor-pointer"
+                      title="Ekspor laporan checklist harian ini ke Excel"
+                    >
+                      <Download className="w-3.5 h-3.5 text-brand-100 shrink-0" />
+                      <span>Ekspor Excel</span>
                     </button>
                   </div>
                 </div>
@@ -1522,8 +1639,8 @@ export const LeaderChecklist: React.FC = () => {
                 </div>
               </div>
 
-              {/* Stat Ringkasan Rata-rata Bulanan */}
-              <div className="flex items-center gap-6 border-t lg:border-t-0 lg:border-l border-white/20 pt-3 lg:pt-0 lg:pl-6 w-full lg:w-auto justify-between lg:justify-start tabular-nums">
+              {/* Stat Ringkasan Rata-rata Bulanan & Ekspor */}
+              <div className="flex flex-wrap items-center gap-5 border-t lg:border-t-0 lg:border-l border-white/20 pt-3 lg:pt-0 lg:pl-6 w-full lg:w-auto justify-between lg:justify-start tabular-nums">
                 <div>
                   <p className="text-xs text-brand-100">Total Checklist Masuk</p>
                   <p className="text-xl font-black text-white font-mono">
@@ -1534,6 +1651,14 @@ export const LeaderChecklist: React.FC = () => {
                   <p className="text-xs text-brand-100">Rata-rata Skor Efektif</p>
                   <p className="text-2xl font-black text-amber-300 font-mono">{overallMonthlyScore}%</p>
                 </div>
+                <button
+                  type="button"
+                  onClick={handleExportMonthlyChecklist}
+                  className="whitespace-nowrap shrink-0 px-3.5 py-2 bg-white/15 hover:bg-white/25 text-white border border-white/25 rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Ekspor Rekap (.xlsx)</span>
+                </button>
               </div>
             </div>
 

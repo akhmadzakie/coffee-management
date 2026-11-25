@@ -892,6 +892,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
 
   const hasLocalChanges = useRef(false);
   const dirtyTablesRef = useRef<Set<string>>(new Set());
+  const dirtyVersionRef = useRef<Map<string, number>>(new Map());
   const isSyncingRef = useRef(false);
   const isApplyingServerUpdate = useRef(false);
   const deviceRef = useRef<DetectedDeviceInfo>({} as DetectedDeviceInfo);
@@ -903,8 +904,12 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     hasLocalChanges.current = true;
     if (tables.length === 0) {
       dirtyTablesRef.current.add("*");
+      dirtyVersionRef.current.set("*", (dirtyVersionRef.current.get("*") || 0) + 1);
     } else {
-      tables.forEach((t) => dirtyTablesRef.current.add(t));
+      tables.forEach((t) => {
+        dirtyTablesRef.current.add(t);
+        dirtyVersionRef.current.set(t, (dirtyVersionRef.current.get(t) || 0) + 1);
+      });
     }
   };
 
@@ -1862,6 +1867,9 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         hasLocalChanges.current = false;
         return;
       }
+      const sentVersions = new Map<string, number>(
+        sentKeys.map((k) => [k, dirtyVersionRef.current.get(k) || 0])
+      );
 
       const fullTableMap: Record<string, any> = {
         cash_accounts: cashAccounts,
@@ -1928,7 +1936,11 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
           if (resData?.v) {
             serverVersionRef.current = resData.v;
           }
-          sentKeys.forEach((k) => dirtyTablesRef.current.delete(k));
+          sentKeys.forEach((k) => {
+            if ((dirtyVersionRef.current.get(k) || 0) === sentVersions.get(k)) {
+              dirtyTablesRef.current.delete(k);
+            }
+          });
           hasLocalChanges.current = dirtyTablesRef.current.size > 0;
           setLastSyncTime(new Date());
         } else {
@@ -2128,6 +2140,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     setCurrentUser(null);
     serverVersionRef.current = null;
     dirtyTablesRef.current.clear();
+    dirtyVersionRef.current.clear();
     hasLocalChanges.current = false;
     localStorage.removeItem(userKey);
     del(userKey).catch(() => {});
@@ -2148,6 +2161,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     } catch {}
     hasLocalChanges.current = false;
     dirtyTablesRef.current.clear();
+    dirtyVersionRef.current.clear();
     serverVersionRef.current = null;
     await fetchFromServer(true);
   };
@@ -2168,6 +2182,10 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     };
     setAuditLogs((prev) => [log, ...prev]);
     dirtyTablesRef.current.add("audit_logs");
+    dirtyVersionRef.current.set(
+      "audit_logs",
+      (dirtyVersionRef.current.get("audit_logs") || 0) + 1
+    );
   };
 
   

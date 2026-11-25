@@ -462,6 +462,10 @@ async function ensureTables() {
         total_amount DOUBLE PRECISION NOT NULL DEFAULT 0,
         cash_account_id VARCHAR(255),
         bank_account_id VARCHAR(255),
+        qris_account_id VARCHAR(255),
+        edc_account_id VARCHAR(255),
+        transfer_account_id VARCHAR(255),
+        online_delivery_account_id VARCHAR(255),
         non_cash_settlement_status VARCHAR(50) DEFAULT 'SETTLED',
         non_cash_settled_at VARCHAR(100),
         notes TEXT,
@@ -836,7 +840,11 @@ async function ensureTables() {
     `ALTER TABLE payroll_records ALTER COLUMN basic_salary TYPE DOUBLE PRECISION`,
     `ALTER TABLE payroll_records ALTER COLUMN gross_pay TYPE DOUBLE PRECISION`,
     `ALTER TABLE payroll_records ALTER COLUMN net_pay TYPE DOUBLE PRECISION`,
-    `ALTER TABLE manager_approval_requests ALTER COLUMN amount TYPE DOUBLE PRECISION`
+    `ALTER TABLE manager_approval_requests ALTER COLUMN amount TYPE DOUBLE PRECISION`,
+    `ALTER TABLE daily_sales_recaps ADD COLUMN IF NOT EXISTS qris_account_id VARCHAR(255)`,
+    `ALTER TABLE daily_sales_recaps ADD COLUMN IF NOT EXISTS edc_account_id VARCHAR(255)`,
+    `ALTER TABLE daily_sales_recaps ADD COLUMN IF NOT EXISTS transfer_account_id VARCHAR(255)`,
+    `ALTER TABLE daily_sales_recaps ADD COLUMN IF NOT EXISTS online_delivery_account_id VARCHAR(255)`
   ];
 
   for (const q of queries) {
@@ -1071,6 +1079,10 @@ async function startServer() {
     totalAmount: Math.round(Number(r.totalAmount) || 0),
     cashAccountId: r.cashAccountId ? String(r.cashAccountId) : null,
     bankAccountId: r.bankAccountId ? String(r.bankAccountId) : null,
+    qrisAccountId: r.qrisAccountId ? String(r.qrisAccountId) : null,
+    edcAccountId: r.edcAccountId ? String(r.edcAccountId) : null,
+    transferAccountId: r.transferAccountId ? String(r.transferAccountId) : null,
+    onlineDeliveryAccountId: r.onlineDeliveryAccountId ? String(r.onlineDeliveryAccountId) : null,
     nonCashSettlementStatus: r.nonCashSettlementStatus === "PENDING" ? "PENDING" : "SETTLED",
     nonCashSettledAt: r.nonCashSettledAt ? String(r.nonCashSettledAt) : null,
     notes: r.notes ? String(r.notes) : null,
@@ -2941,9 +2953,6 @@ async function startServer() {
             ? stock_opname_items.map(sanitizeStockOpnameItem)
             : [];
         }
-        if (closed_periods !== undefined) {
-          offlineState.closed_periods = Array.isArray(closed_periods) ? closed_periods : [];
-        }
         if (device_sessions !== undefined && Array.isArray(device_sessions)) {
           const protectedActive = (offlineState.device_sessions || []).filter(
             (s: any) => s.status === "ACTIVE"
@@ -4102,15 +4111,86 @@ async function startServer() {
     }
   });
 
+  const PERIOD_LOCKED_GENERIC_TABLES = new Set([
+    "cash_transactions",
+    "daily_sales_recaps",
+    "payroll_records",
+    "purchase_orders",
+    "sales_transactions",
+  ]);
+
+  const extractGenericRowPeriod = (tableName: string, row: any): string | null => {
+    if (!row || typeof row !== "object") return null;
+    if (tableName === "payroll_records") {
+      const p = String(row.period || "").trim().slice(0, 7);
+      return /^\d{4}-\d{2}$/.test(p) ? p : null;
+    }
+    if (row.date) return getLocalPeriodFromTimestamp(row.date);
+    if (row.createdAt) return getLocalPeriodFromTimestamp(row.createdAt);
+    return null;
+  };
+
+  const sanitizeGenericInsertPayload = (tableName: string, body: any) => {
+    switch (tableName) {
+      case "ingredients":
+        return sanitizeIngredient(body);
+      case "stock_movements":
+        return sanitizeStockMovement(body);
+      case "sales_transactions":
+        return sanitizeSalesTransaction(body);
+      case "daily_sales_recaps":
+        return sanitizeDailySalesRecap(body);
+      case "sales_import_logs":
+        return sanitizeSalesImportLog(body);
+      case "cash_transactions":
+        return sanitizeCashTransaction(body);
+      case "cash_accounts":
+        return sanitizeCashAccount(body);
+      case "expense_categories":
+        return sanitizeExpenseCategory(body);
+      case "budgets":
+        return sanitizeBudget(body);
+      case "bank_reconciliations":
+        return sanitizeBankReconciliation(body);
+      case "bank_statement_lines":
+        return sanitizeBankStatementLine(body);
+      case "stock_opnames":
+        return sanitizeStockOpname(body);
+      case "stock_opname_items":
+        return sanitizeStockOpnameItem(body);
+      case "payroll_records":
+        return sanitizePayrollRecord(body);
+      case "purchase_orders":
+        return sanitizePurchaseOrder(body);
+      default:
+        return body;
+    }
+  };
+
   app.post(
     "/api/:table",
     rbacMiddleware,
     auditLogMiddleware,
     async (req, res) => {
       try {
-        const table = getTable(req.params.table);
+        if (!isDbConnected) {
+          return res.status(503).json({ error: "Database sedang offline." });
+        }
+        const tableName = req.params.table;
+        const table = getTable(tableName);
         if (!table) return res.status(404).json({ error: "Table not found" });
-        await db.insert(table).values(req.body);
+        const payload = sanitizeGenericInsertPayload(tableName, req.body);
+        if (PERIOD_LOCKED_GENERIC_TABLES.has(tableName)) {
+          const closedSet = await getActiveClosedPeriodSet();
+          const period = extractGenericRowPeriod(tableName, payload);
+          if (period && closedSet.has(period)) {
+            return res.status(400).json({
+              error: `Periode ${period} sudah tutup buku dan terkunci dari perubahan.`,
+            });
+          }
+        }
+        await db.insert(table).values(payload);
+        bumpDataVersion();
         res.json({ success: true });
       } catch (e) {
         console.error("Insert error:", e);
@@ -4125,9 +4205,32 @@ async function startServer() {
     auditLogMiddleware,
     async (req, res) => {
       try {
-        const table = getTable(req.params.table);
+        if (!isDbConnected) {
+          return res.status(503).json({ error: "Database sedang offline." });
+        }
+        const tableName = req.params.table;
+        const table = getTable(tableName);
         if (!table) return res.status(404).json({ error: "Table not found" });
+        if (PERIOD_LOCKED_GENERIC_TABLES.has(tableName)) {
+          const closedSet = await getActiveClosedPeriodSet();
+          const existingRows = await db
+            .select()
+            .from(table)
+            .where(eq(table.id, req.params.id))
+            .limit(1);
+          const existingPeriod = extractGenericRowPeriod(tableName, existingRows[0]);
+          const incomingPeriod = extractGenericRowPeriod(tableName, req.body);
+          const lockedPeriod =
+            (existingPeriod && closedSet.has(existingPeriod) ? existingPeriod : null) ||
+            (incomingPeriod && closedSet.has(incomingPeriod) ? incomingPeriod : null);
+          if (lockedPeriod) {
+            return res.status(400).json({
+              error: `Periode ${lockedPeriod} sudah tutup buku dan terkunci dari perubahan.`,
+            });
+          }
+        }
         await db.update(table).set(req.body).where(eq(table.id, req.params.id));
+        bumpDataVersion();
         res.json({ success: true });
       } catch (e) {
         console.error("Update error:", e);
@@ -4142,9 +4245,28 @@ async function startServer() {
     auditLogMiddleware,
     async (req, res) => {
       try {
-        const table = getTable(req.params.table);
+        if (!isDbConnected) {
+          return res.status(503).json({ error: "Database sedang offline." });
+        }
+        const tableName = req.params.table;
+        const table = getTable(tableName);
         if (!table) return res.status(404).json({ error: "Table not found" });
+        if (PERIOD_LOCKED_GENERIC_TABLES.has(tableName)) {
+          const closedSet = await getActiveClosedPeriodSet();
+          const existingRows = await db
+            .select()
+            .from(table)
+            .where(eq(table.id, req.params.id))
+            .limit(1);
+          const existingPeriod = extractGenericRowPeriod(tableName, existingRows[0]);
+          if (existingPeriod && closedSet.has(existingPeriod)) {
+            return res.status(400).json({
+              error: `Periode ${existingPeriod} sudah tutup buku dan data tidak dapat dihapus.`,
+            });
+          }
+        }
         await db.delete(table).where(eq(table.id, req.params.id));
+        bumpDataVersion();
         res.json({ success: true });
       } catch (e) {
         console.error("Delete error:", e);

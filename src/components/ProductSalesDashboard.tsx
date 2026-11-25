@@ -502,7 +502,7 @@ export const ProductSalesDashboard: React.FC<ProductSalesDashboardProps> = ({
     );
   };
 
-  const handleExportFiltered = () => {
+  const handleExportFiltered = async () => {
     if (
       analytics.productMixRows.length === 0 &&
       analytics.filteredTransactions.length === 0
@@ -512,14 +512,18 @@ export const ProductSalesDashboard: React.FC<ProductSalesDashboardProps> = ({
       );
       return;
     }
-    exportProductSalesAnalyticsToXlsx({
-      analytics,
-      settings,
-      periodLabel: activePeriodLabel,
-    });
-    toast.success(
-      "Laporan Penjualan Produk (4 sheet analitik) berhasil diekspor ke Excel."
-    );
+    try {
+      await exportProductSalesAnalyticsToXlsx({
+        analytics,
+        settings,
+        periodLabel: activePeriodLabel,
+      });
+      toast.success(
+        "Laporan Penjualan Produk (4 sheet analitik) berhasil diekspor ke Excel."
+      );
+    } catch (err: any) {
+      toast.error("Gagal mengekspor laporan penjualan produk: " + (err?.message || err));
+    }
   };
 
   // Charts Data
@@ -600,68 +604,76 @@ export const ProductSalesDashboard: React.FC<ProductSalesDashboardProps> = ({
               <span>Ekspor Excel</span>
             </button>
 
-            {!isReadOnly && (
-              <div className="shrink-0">
-                <CsvImportExport
-                  onImport={onImportSales}
-                  templateHeaders={[
-                    "Tanggal",
-                    "Nama Menu",
-                    "Quantity",
-                    "Total Penjualan",
-                  ]}
-                  templateExampleRow={[
-                    todayYmd,
-                    catalogVariantChoices[0]?.menuName ||
-                      "Kopi Susu Gula Aren - Iced 16oz",
-                    "45",
-                    "990000",
-                  ]}
-                  templateFilename="Template_Import_Penjualan_Produk.xlsx"
-                  buttonLabel="Import POS Excel / CSV"
-                  currentData={salesTransactions.slice(0, 50).map((s) => ({
-                    id: s.id,
-                    Tanggal: String(s.date).slice(0, 10),
-                    "Nama Menu": s.menuName,
-                    Quantity: s.quantitySold,
-                    "Total Penjualan": s.totalPrice,
-                  }))}
-                  templateDropdowns={{
-                    "Nama Menu":
-                      catalogVariantChoices.length > 0
-                        ? Array.from(
-                            new Set(
-                              catalogVariantChoices.map((c) => c.menuName)
-                            )
+            <div className="shrink-0">
+              <CsvImportExport
+                onImport={onImportSales}
+                canImport={!isReadOnly}
+                allowBulkEdit={false}
+                requiredHeaders={["Nama Menu", "Quantity", "Total Penjualan"]}
+                exportFilename={`Data_Penjualan_Produk_${todayYmd}`}
+                exportTitle="Data Transaksi Penjualan Produk"
+                templateHeaders={[
+                  "Tanggal",
+                  "Nama Menu",
+                  "Quantity",
+                  "Total Penjualan",
+                ]}
+                templateExampleRow={[
+                  todayYmd,
+                  catalogVariantChoices[0]?.menuName ||
+                    "Kopi Susu Gula Aren - Iced 16oz",
+                  "45",
+                  "990000",
+                ]}
+                templateFilename="Template_Import_Penjualan_Produk.xlsx"
+                buttonLabel={isReadOnly ? "Ekspor Data" : "Impor POS Excel / CSV"}
+                currentData={analytics.filteredTransactions.map((s) => ({
+                  id: s.id,
+                  Tanggal: String(s.date).slice(0, 10),
+                  "Nama Menu": s.menuName,
+                  Quantity: s.quantitySold,
+                  "Total Penjualan": s.totalPrice,
+                }))}
+                templateDropdowns={{
+                  "Nama Menu":
+                    catalogVariantChoices.length > 0
+                      ? Array.from(
+                          new Set(
+                            catalogVariantChoices.map((c) => c.menuName)
                           )
-                        : [
-                            "Kopi Susu Gula Aren - Iced 16oz",
-                            "Cafe Latte - Hot 8oz",
-                            "Nasi Ayam Sambal Matah",
-                          ],
-                  }}
-                  templateColumnTypes={{
-                    Tanggal: "date",
-                    Quantity: "integer",
-                    "Total Penjualan": "number",
-                  }}
-                  templateHints={{
-                    Tanggal:
-                      "Format tanggal penjualan: YYYY-MM-DD (contoh: 2026-11-23)",
-                    "Nama Menu":
-                      "Pilih produk & varian dari Katalog Menu agar HPP & pemotongan stok akurat",
-                    Quantity: "Jumlah cup / porsi terjual",
-                    "Total Penjualan":
-                      "Total nominal penjualan dalam Rupiah (bilangan bulat)",
-                  }}
-                  templateInstructions={[
-                    "Template otomatis terhubung dengan daftar Produk & Varian di modul Katalog Menu.",
-                    "Mendukung ekspor dari Moka, Majoo, Pawoon, Qasir, maupun Square POS.",
-                    "Setelah diimpor, sistem menghitung HPP, laba kotor, dan memotong stok bahan sesuai resep varian.",
-                  ]}
-                />
-              </div>
-            )}
+                        )
+                      : [
+                          "Kopi Susu Gula Aren - Iced 16oz",
+                          "Cafe Latte - Hot 8oz",
+                          "Nasi Ayam Sambal Matah",
+                        ],
+                }}
+                templateColumnTypes={{
+                  Tanggal: "date",
+                  Quantity: "integer",
+                  "Total Penjualan": "number",
+                }}
+                templateFormats={{
+                  Tanggal: "date",
+                  Quantity: "integer",
+                  "Total Penjualan": "currency",
+                }}
+                templateHints={{
+                  Tanggal:
+                    "Format tanggal penjualan: YYYY-MM-DD (contoh: 2026-11-23)",
+                  "Nama Menu":
+                    "Pilih produk & varian dari Katalog Menu agar HPP & pemotongan stok akurat",
+                  Quantity: "Jumlah cup / porsi terjual",
+                  "Total Penjualan":
+                    "Total nominal penjualan dalam Rupiah (bilangan bulat)",
+                }}
+                templateInstructions={[
+                  "Template otomatis terhubung dengan daftar Produk & Varian di modul Katalog Menu.",
+                  "Mendukung ekspor dari Moka, Majoo, Pawoon, Qasir, maupun Square POS.",
+                  "Setelah diimpor, sistem menghitung HPP, laba kotor, dan memotong stok bahan sesuai resep varian.",
+                ]}
+              />
+            </div>
           </div>
         </div>
 

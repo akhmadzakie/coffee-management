@@ -11,6 +11,10 @@ import {
   KPIRecord,
   Employee,
   DailySalesRecap,
+  PurchaseOrder,
+  Supplier,
+  Product,
+  ShiftSession,
 } from "../types";
 import {
   getSaleTransactionAmount,
@@ -23,9 +27,12 @@ import {
   classifyDailyAttendanceStatus,
 } from "./attendanceRecap";
 import {
+  inferProductGroup,
   PRODUCT_GROUP_LABELS,
   type ProductSalesAnalyticsResult,
 } from "./productSalesAnalytics";
+import { buildStyledWorkbook } from "./excelTemplate";
+import { formatStockMovementTypeLabel } from "./export";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -41,53 +48,13 @@ const toDateIndo = (dateStr: string | Date): string => {
   });
 };
 
-/** Bold the first row of a worksheet with dark blue header */
-const boldFirstRow = (ws: XLSX.WorkSheet, cols: number) => {
-  for (let C = 0; C < cols; C++) {
-    const addr = XLSX.utils.encode_cell({ r: 0, c: C });
-    if (!ws[addr]) ws[addr] = { v: "", t: "s" };
-    ws[addr].s = {
-      font: { bold: true, color: { rgb: "FFFFFF" }, sz: 11 },
-      fill: { fgColor: { rgb: "1E3A5F" } },
-      alignment: { horizontal: "center", vertical: "center", wrapText: true },
-      border: {
-        bottom: { style: "thin", color: { rgb: "334155" } },
-        right: { style: "thin", color: { rgb: "334155" } },
-      },
-    };
-  }
-};
-
-/** Style alternating data rows */
-const styleDataRows = (
-  ws: XLSX.WorkSheet,
-  startRow: number,
-  endRow: number,
-  cols: number,
-) => {
-  for (let R = startRow; R <= endRow; R++) {
-    const isOdd = (R - startRow) % 2 === 0;
-    const fillColor = isOdd ? "F8FAFC" : "FFFFFF";
-    for (let C = 0; C < cols; C++) {
-      const addr = XLSX.utils.encode_cell({ r: R, c: C });
-      if (ws[addr]) {
-        ws[addr].s = {
-          ...(ws[addr].s || {}),
-          fill: { fgColor: { rgb: fillColor } },
-          border: {
-            bottom: { style: "hair", color: { rgb: "E2E8F0" } },
-            right: { style: "hair", color: { rgb: "E2E8F0" } },
-          },
-          alignment: { vertical: "center" },
-        };
-      }
-    }
-  }
-};
-
-/** Download an XLSX workbook */
-const downloadXlsx = (wb: XLSX.WorkBook, filename: string) => {
-  XLSX.writeFile(wb, `${filename}.xlsx`);
+const toYmdSafe = (dateStr: string | Date | undefined): string => {
+  if (!dateStr) return "-";
+  const s = String(dateStr).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return s.slice(0, 10) || "-";
+  return getLocalDateString(d, DEFAULT_STORE_TIMEZONE);
 };
 
 // ─── Export Finance to XLSX ────────────────────────────────────────────────────
@@ -99,125 +66,68 @@ export interface ExportFinanceXlsxOptions {
   expenseCategories?: ExpenseCategory[];
 }
 
-export const exportFinanceToXlsx = ({
+export const exportFinanceToXlsx = async ({
   finance,
   settings,
   periodLabel,
-  expenseCategories = [],
 }: ExportFinanceXlsxOptions) => {
-  const wb = XLSX.utils.book_new();
-  const brandName = settings.brandName || "Julia's Management System";
-
-  // ─── Sheet 1: Ringkasan ───────────────────────────────────────────────────
+  const brandName = settings.brandName || "Julia's • Specialty Room • Coffee • Eatery";
   const operationalFinance = finance.filter((f) => !isNonOperationalCashTransaction(f));
   const isCashIn = (t: unknown) => {
     const up = String(t || "").toUpperCase();
     return up === "CASH_IN" || up === "IN" || up === "INCOME";
   };
-  const totalIn = operationalFinance
-    .filter((f) => isCashIn(f.type))
-    .reduce((a, b) => a + (Number(b.amount) || 0), 0);
-  const totalOut = operationalFinance
-    .filter((f) => !isCashIn(f.type))
-    .reduce((a, b) => a + (Number(b.amount) || 0), 0);
+  const totalIn = Math.round(
+    operationalFinance
+      .filter((f) => isCashIn(f.type))
+      .reduce((a, b) => a + (Number(b.amount) || 0), 0)
+  );
+  const totalOut = Math.round(
+    operationalFinance
+      .filter((f) => !isCashIn(f.type))
+      .reduce((a, b) => a + (Number(b.amount) || 0), 0)
+  );
   const net = totalIn - totalOut;
 
-  const summaryData = [
-    ["Laporan Arus Kas", brandName],
-    ["Periode", periodLabel],
-    ["Dicetak", toDateIndo(new Date())],
-    [],
-    ["Keterangan", "Jumlah"],
-    ["Total Pemasukan", totalIn],
-    ["Total Pengeluaran", totalOut],
-    ["Arus Kas Bersih", net],
-  ];
-  const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
-  wsSummary["!cols"] = [{ wch: 28 }, { wch: 22 }];
-  ["B6", "B7", "B8"].forEach((addr) => {
-    if (wsSummary[addr]) wsSummary[addr].z = '#,##0';
+  await buildStyledWorkbook({
+    filename: `Arus_Kas_${periodLabel.replace(/\s+/g, "_")}`,
+    brandName,
+    sheets: [
+      {
+        name: "Ringkasan",
+        title: "Laporan Arus Kas & Buku Besar",
+        subtitle: `${brandName} • Periode: ${periodLabel}`,
+        headers: ["Indikator Arus Kas", "Jumlah (Rp)"],
+        rows: [
+          ["Total Pemasukan Operasional", totalIn],
+          ["Total Pengeluaran Operasional", totalOut],
+          ["Arus Kas Bersih (Net Cashflow)", net],
+        ],
+        columnFormats: ["text", "currency"],
+      },
+      {
+        name: "Transaksi",
+        title: "Rincian Transaksi Buku Kas",
+        subtitle: `Periode: ${periodLabel} • ${finance.length} transaksi`,
+        headers: ["Tanggal", "Jenis", "Kategori", "Keterangan", "Vendor", "Jumlah (Rp)"],
+        rows: finance.map((f) => [
+          toYmdSafe(f.date),
+          isCashIn(f.type) ? "Pemasukan" : "Pengeluaran",
+          f.category || "-",
+          f.description || "-",
+          f.vendorName || "-",
+          Math.round(Number(f.amount) || 0),
+        ]),
+        columnFormats: ["date", "text", "text", "text", "text", "currency"],
+        totalRow: ["TOTAL OPS", "", "", "", "", net],
+      },
+    ],
   });
-  XLSX.utils.book_append_sheet(wb, wsSummary, "Ringkasan");
-
-  // ─── Sheet 2: Data Transaksi ──────────────────────────────────────────────
-  const headers = ["Tanggal", "Jenis", "Kategori", "Keterangan", "Jumlah (Rp)"];
-  const rows = finance.map((f) => [
-    toDateIndo(f.date),
-    f.type === "CASH_IN" ? "Pemasukan" : "Pengeluaran",
-    f.category,
-    f.description,
-    f.amount,
-  ]);
-
-  const wsData = XLSX.utils.aoa_to_sheet([headers, ...rows]);
-  wsData["!cols"] = [
-    { wch: 16 }, { wch: 14 }, { wch: 22 }, { wch: 40 }, { wch: 18 },
-  ];
-  for (let i = 2; i <= rows.length + 1; i++) {
-    const addr = `E${i}`;
-    if (wsData[addr]) wsData[addr].z = '#,##0';
-  }
-  boldFirstRow(wsData, headers.length);
-  styleDataRows(wsData, 1, rows.length, headers.length);
-  XLSX.utils.book_append_sheet(wb, wsData, "Transaksi");
-
-  // ─── Sheet 3: Template Input ──────────────────────────────────────────────
-  const templateHeaders = ["Tanggal*", "Jenis*", "Kategori*", "Keterangan*", "Jumlah (Rp)*"];
-  const exampleRows = [
-    [
-      toDateIndo(new Date()),
-      "Pemasukan",
-      expenseCategories[0]?.name || "Pendapatan Penjualan",
-      "Contoh: pendapatan shift pagi",
-      500000,
-    ],
-    [
-      toDateIndo(new Date()),
-      "Pengeluaran",
-      expenseCategories[1]?.name || "Operasional",
-      "Contoh: beli bahan baku",
-      150000,
-    ],
-  ];
-
-  const wsTemplate = XLSX.utils.aoa_to_sheet([templateHeaders, ...exampleRows]);
-  wsTemplate["!cols"] = [
-    { wch: 16 }, { wch: 14 }, { wch: 22 }, { wch: 40 }, { wch: 18 },
-  ];
-  wsTemplate["!dataValidations"] = [
-    {
-      sqref: "B2:B1000",
-      type: "list",
-      formula1: '"Pemasukan,Pengeluaran"',
-      showDropDown: false,
-      showErrorMessage: true,
-      error: "Pilih: Pemasukan atau Pengeluaran",
-      errorTitle: "Nilai tidak valid",
-    },
-  ] as any;
-
-  for (let i = 2; i <= 3; i++) {
-    const addr = `E${i}`;
-    if (wsTemplate[addr]) wsTemplate[addr].z = '#,##0';
-  }
-  // Orange header for template sheet
-  for (let C = 0; C < templateHeaders.length; C++) {
-    const addr = XLSX.utils.encode_cell({ r: 0, c: C });
-    if (!wsTemplate[addr]) wsTemplate[addr] = { v: "", t: "s" };
-    wsTemplate[addr].s = {
-      font: { bold: true, color: { rgb: "FFFFFF" }, sz: 11 },
-      fill: { fgColor: { rgb: "D97706" } },
-      alignment: { horizontal: "center", vertical: "center" },
-    };
-  }
-  XLSX.utils.book_append_sheet(wb, wsTemplate, "Template Input");
-
-  downloadXlsx(wb, `Arus_Kas_${periodLabel}`);
 };
 
 // ─── Export Sales to XLSX ──────────────────────────────────────────────────────
 
-export const exportSalesToXlsx = ({
+export const exportSalesToXlsx = async ({
   sales,
   settings,
   periodLabel,
@@ -226,46 +136,49 @@ export const exportSalesToXlsx = ({
   settings: Settings;
   periodLabel: string;
 }) => {
-  const wb = XLSX.utils.book_new();
-  const brandName = settings.brandName || "Julia's Management System";
+  const brandName = settings.brandName || "Julia's • Specialty Room • Coffee • Eatery";
+  const totalQty = sales.reduce((a, b) => a + (Number(b.quantitySold) || 0), 0);
+  const totalRevenue = Math.round(
+    sales.reduce((a, b) => a + getSaleTransactionAmount(b), 0)
+  );
 
-  const totalQty = sales.reduce((a, b) => a + b.quantitySold, 0);
-  const totalRevenue = sales.reduce((a, b) => a + b.totalPrice, 0);
-  const summaryData = [
-    ["Laporan Penjualan", brandName],
-    ["Periode", periodLabel],
-    ["Total Transaksi", sales.length],
-    ["Total Qty Terjual", totalQty],
-    ["Total Omset (Rp)", totalRevenue],
-  ];
-  const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
-  wsSummary["!cols"] = [{ wch: 22 }, { wch: 22 }];
-  if (wsSummary["B5"]) wsSummary["B5"].z = '#,##0';
-  XLSX.utils.book_append_sheet(wb, wsSummary, "Ringkasan");
-
-  const headers = ["Tanggal", "Nama Menu", "Qty Terjual", "Total (Rp)"];
-  const rows = sales.map((s) => [
-    toDateIndo(s.date),
-    s.menuName,
-    s.quantitySold,
-    s.totalPrice,
-  ]);
-  const wsData = XLSX.utils.aoa_to_sheet([headers, ...rows]);
-  wsData["!cols"] = [{ wch: 16 }, { wch: 30 }, { wch: 14 }, { wch: 18 }];
-  for (let i = 2; i <= rows.length + 1; i++) {
-    const addr = `D${i}`;
-    if (wsData[addr]) wsData[addr].z = '#,##0';
-  }
-  boldFirstRow(wsData, headers.length);
-  styleDataRows(wsData, 1, rows.length, headers.length);
-  XLSX.utils.book_append_sheet(wb, wsData, "Penjualan");
-
-  downloadXlsx(wb, `Penjualan_${periodLabel}`);
+  await buildStyledWorkbook({
+    filename: `Penjualan_${periodLabel.replace(/\s+/g, "_")}`,
+    brandName,
+    sheets: [
+      {
+        name: "Ringkasan",
+        title: "Laporan Penjualan Produk",
+        subtitle: `${brandName} • Periode: ${periodLabel}`,
+        headers: ["Indikator", "Nilai"],
+        rows: [
+          ["Total Baris Transaksi", sales.length],
+          ["Total Cup / Porsi Terjual", totalQty],
+          ["Total Omzet Penjualan (Rp)", totalRevenue],
+        ],
+        columnFormats: ["text", "integer"],
+      },
+      {
+        name: "Penjualan",
+        title: "Daftar Transaksi Penjualan",
+        subtitle: `Periode: ${periodLabel} • ${sales.length} baris`,
+        headers: ["Tanggal", "Nama Menu", "Qty Terjual", "Total (Rp)"],
+        rows: sales.map((s) => [
+          toYmdSafe(s.date),
+          s.menuName,
+          Math.round(Number(s.quantitySold) || 0),
+          Math.round(getSaleTransactionAmount(s)),
+        ]),
+        columnFormats: ["date", "text", "integer", "currency"],
+        totalRow: ["TOTAL", `${sales.length} Transaksi`, totalQty, totalRevenue],
+      },
+    ],
+  });
 };
 
 // ─── Export Inventory to XLSX ──────────────────────────────────────────────────
 
-export const exportInventoryToXlsx = ({
+export const exportInventoryToXlsx = async ({
   ingredients,
   movements,
   settings,
@@ -276,118 +189,150 @@ export const exportInventoryToXlsx = ({
   settings: Settings;
   periodLabel: string;
 }) => {
-  const wb = XLSX.utils.book_new();
+  const brandName = settings.brandName || "Julia's • Specialty Room • Coffee • Eatery";
+  const totalValuation = Math.round(
+    ingredients.reduce(
+      (sum, i) => sum + Math.max(0, Number(i.currentStock) || 0) * (Number(i.costPerUnit) || 0),
+      0
+    )
+  );
 
-  // Sheet 1: Stok Saat Ini
-  const stockHeaders = [
-    "Nama Bahan", "Kategori", "Stok Saat Ini", "Stok Minimum",
-    "Satuan", "Biaya/Unit (Rp)", "Nilai Stok (Rp)", "Status",
-  ];
-  const stockRows = ingredients.map((i) => [
-    i.name, i.category, i.currentStock, i.minStock, i.unit,
-    i.costPerUnit || 0,
-    (i.currentStock || 0) * (i.costPerUnit || 0),
-    i.currentStock <= i.minStock ? "⚠ Stok Rendah" : "✓ Aman",
-  ]);
-  const wsStock = XLSX.utils.aoa_to_sheet([stockHeaders, ...stockRows]);
-  wsStock["!cols"] = [
-    { wch: 24 }, { wch: 16 }, { wch: 14 }, { wch: 14 },
-    { wch: 10 }, { wch: 18 }, { wch: 18 }, { wch: 14 },
-  ];
-  for (let i = 2; i <= stockRows.length + 1; i++) {
-    if (wsStock[`F${i}`]) wsStock[`F${i}`].z = '#,##0';
-    if (wsStock[`G${i}`]) wsStock[`G${i}`].z = '#,##0';
-  }
-  boldFirstRow(wsStock, stockHeaders.length);
-  styleDataRows(wsStock, 1, stockRows.length, stockHeaders.length);
-  XLSX.utils.book_append_sheet(wb, wsStock, "Stok Saat Ini");
-
-  // Sheet 2: Mutasi Stok
-  const mutHeaders = [
-    "Tanggal", "Bahan Baku", "Kategori", "Jenis Mutasi",
-    "Jumlah", "Satuan", "Catatan", "Operator",
-  ];
-  const mutRows = movements.map((m) => {
-    const ing = ingredients.find((i) => i.id === m.ingredientId);
-    return [
-      toDateIndo(m.date),
-      ing?.name || "-",
-      ing?.category || "-",
-      m.type === "IN" ? "Masuk" : m.type,
-      m.quantity,
-      ing?.unit || "-",
-      (m as any).note || "-",
-      (m as any).createdBy || "-",
-    ];
+  await buildStyledWorkbook({
+    filename: `Inventaris_${periodLabel.replace(/\s+/g, "_")}`,
+    brandName,
+    sheets: [
+      {
+        name: "Stok Saat Ini",
+        title: "Saldo & Valuasi Bahan Baku Gudang",
+        subtitle: `${brandName} • ${ingredients.length} bahan terdaftar`,
+        headers: [
+          "Kode",
+          "Nama Bahan",
+          "Kategori",
+          "Lokasi",
+          "Stok Saat Ini",
+          "Stok Minimum",
+          "Satuan",
+          "Modal / Unit (Rp)",
+          "Nilai Stok (Rp)",
+          "Status",
+        ],
+        rows: ingredients.map((i) => {
+          const val = Math.round(
+            Math.max(0, Number(i.currentStock) || 0) * (Number(i.costPerUnit) || 0)
+          );
+          return [
+            i.code || "-",
+            i.name,
+            i.category,
+            i.storageLocation || "BAR",
+            Number(i.currentStock) || 0,
+            Number(i.minStock) || 0,
+            i.unit,
+            Math.round(Number(i.costPerUnit) || 0),
+            val,
+            i.currentStock <= i.minStock ? "Stok Rendah" : "Aman",
+          ];
+        }),
+        columnFormats: [
+          "text",
+          "text",
+          "text",
+          "text",
+          "number",
+          "number",
+          "text",
+          "currency",
+          "currency",
+          "text",
+        ],
+        totalRow: ["", "TOTAL VALUASI ASET STOK", "", "", "", "", "", "", totalValuation, ""],
+      },
+      {
+        name: "Mutasi Stok",
+        title: "Riwayat Mutasi Masuk & Keluar Stok",
+        subtitle: `Periode: ${periodLabel} • ${movements.length} mutasi`,
+        headers: ["Tanggal", "Bahan Baku", "Kategori", "Jenis Mutasi", "Jumlah", "Satuan", "Catatan", "Operator"],
+        rows: movements.map((m) => {
+          const ing = ingredients.find((i) => i.id === m.ingredientId);
+          return [
+            toYmdSafe(m.date),
+            ing?.name || "-",
+            ing?.category || "-",
+            formatStockMovementTypeLabel(m.type),
+            Number(m.quantity) || 0,
+            ing?.unit || "-",
+            (m as any).note || "-",
+            (m as any).createdBy || "-",
+          ];
+        }),
+        columnFormats: ["date", "text", "text", "text", "number", "text", "text", "text"],
+      },
+    ],
   });
-  const wsMut = XLSX.utils.aoa_to_sheet([mutHeaders, ...mutRows]);
-  wsMut["!cols"] = [
-    { wch: 16 }, { wch: 24 }, { wch: 16 }, { wch: 14 },
-    { wch: 10 }, { wch: 8 }, { wch: 30 }, { wch: 16 },
-  ];
-  boldFirstRow(wsMut, mutHeaders.length);
-  styleDataRows(wsMut, 1, mutRows.length, mutHeaders.length);
-  XLSX.utils.book_append_sheet(wb, wsMut, "Mutasi Stok");
-
-  downloadXlsx(wb, `Inventaris_${periodLabel}`);
 };
 
 // ─── Download blank import template ───────────────────────────────────────────
 
-export const downloadFinanceImportTemplate = (
+export const downloadFinanceImportTemplate = async (
   expenseCategories: ExpenseCategory[],
 ) => {
-  const wb = XLSX.utils.book_new();
-  const categoryNames = expenseCategories.map((c) => c.name).join(", ");
+  const { buildTemplateWithDropdown } = await import("./excelTemplate");
+  const today = getLocalDateString();
+  const categoryNames = Array.from(
+    new Set(expenseCategories.map((c) => c.name).filter(Boolean))
+  );
+  const firstCat = categoryNames[0] || "Pendapatan Penjualan";
 
-  const petunjuk: (string | number)[][] = [
-    ["PETUNJUK PENGISIAN — TEMPLATE IMPORT KEUANGAN"],
-    ["Tanggal: format DD/MM/YYYY atau YYYY-MM-DD"],
-    [`Jenis: isi "Pemasukan" atau "Pengeluaran"`],
-    [`Kategori: ${categoryNames || "sesuai daftar Kategori Keuangan"}`],
-    ["Jumlah: angka saja tanpa titik/koma (contoh: 50000)"],
-    ["Kolom bertanda * wajib diisi. Hapus baris petunjuk ini sebelum import."],
-    [],
-  ];
-
-  const headers = ["Tanggal*", "Jenis*", "Kategori*", "Keterangan*", "Jumlah (Rp)*"];
-  const exampleData = [
-    [
-      new Date().toLocaleDateString("id-ID", { timeZone: DEFAULT_STORE_TIMEZONE }),
-      "Pemasukan",
-      expenseCategories[0]?.name || "Pendapatan Penjualan",
-      "Pendapatan shift pagi",
-      500000,
+  await buildTemplateWithDropdown({
+    filename: "Template_Import_Keuangan",
+    sheetName: "Data Keuangan",
+    isExampleFirstRow: true,
+    columns: [
+      {
+        header: "Tanggal",
+        type: "date",
+        format: "date",
+        required: true,
+        width: 16,
+        hint: "Format YYYY-MM-DD (contoh: 2026-11-25)",
+      },
+      {
+        header: "Jenis",
+        options: ["Pemasukan", "Pengeluaran"],
+        required: true,
+        width: 16,
+        hint: "Pilih Pemasukan atau Pengeluaran dari dropdown",
+      },
+      {
+        header: "Kategori",
+        options: categoryNames.length > 0 ? categoryNames : ["Operasional", "Bahan Baku"],
+        required: true,
+        width: 28,
+        hint: "Pilih kategori kas dari dropdown",
+      },
+      {
+        header: "Keterangan",
+        type: "text",
+        required: true,
+        width: 38,
+        hint: "Contoh: Pembelian Susu UHT / Omzet Harian",
+      },
+      {
+        header: "Jumlah (Rp)",
+        type: "integer",
+        format: "currency",
+        required: true,
+        width: 20,
+        hint: "Masukkan angka bulat tanpa 'Rp' atau titik (contoh: 150000)",
+      },
     ],
-    [
-      new Date().toLocaleDateString("id-ID", { timeZone: DEFAULT_STORE_TIMEZONE }),
-      "Pengeluaran",
-      expenseCategories[1]?.name || "Operasional",
-      "Pembelian bahan baku",
-      150000,
+    rows: [[today, "Pengeluaran", firstCat, "Contoh: Beli bahan baku kopi", 150000]],
+    instructions: [
+      "Kolom Jenis dan Kategori sudah dilengkapi dropdown Excel.",
+      "Nominal Jumlah (Rp) diisi angka bulat saja (misal: 150000).",
     ],
-  ];
-
-  const ws = XLSX.utils.aoa_to_sheet([...petunjuk, headers, ...exampleData]);
-  ws["!cols"] = [
-    { wch: 16 }, { wch: 14 }, { wch: 28 }, { wch: 40 }, { wch: 18 },
-  ];
-
-  const headerRowIdx = petunjuk.length; // 0-indexed
-  ws["!dataValidations"] = [
-    {
-      sqref: `B${headerRowIdx + 2}:B1000`,
-      type: "list",
-      formula1: '"Pemasukan,Pengeluaran"',
-      showDropDown: false,
-      showErrorMessage: true,
-      error: "Pilih: Pemasukan atau Pengeluaran",
-      errorTitle: "Nilai tidak valid",
-    },
-  ] as any;
-
-  XLSX.utils.book_append_sheet(wb, ws, "Template Import");
-  downloadXlsx(wb, "Template_Import_Keuangan");
+  });
 };
 
 // ─── Parse imported finance XLSX/CSV ─────────────────────────────────────────
@@ -455,7 +400,6 @@ export const parseFinanceImportFile = (
 
         raw.forEach((row, idx) => {
           const rowNum = idx + headerRowIdx + 2;
-          // Normalize keys: strip * and lowercase
           const r: Record<string, string> = {};
           let rawDateCell: unknown = "";
           for (const k in row) {
@@ -464,12 +408,9 @@ export const parseFinanceImportFile = (
             if (normKey === "tanggal") rawDateCell = row[k];
           }
 
-          // Skip empty rows
           if (!r["tanggal"] && !r["jumlah (rp)"] && !r["jumlah"]) return;
-          // Skip petunjuk rows
           if (r["tanggal"].toLowerCase().includes("petunjuk")) return;
 
-          // Resolve type
           const jenisRaw = r["jenis"] || "";
           let type: "CASH_IN" | "CASH_OUT" | null = null;
           if (jenisRaw.toLowerCase().includes("masuk") || jenisRaw.toLowerCase() === "pemasukan")
@@ -484,7 +425,6 @@ export const parseFinanceImportFile = (
             return;
           }
 
-          // Resolve date (aman zona waktu WITA, validasi kalender, serial Excel & DD/MM/YYYY)
           const dateRaw = r["tanggal"];
           let dateISO = "";
           const buildWitaIso = (yyyy: number, mm: number, dd: number): string => {
@@ -548,7 +488,6 @@ export const parseFinanceImportFile = (
             return;
           }
 
-          // Resolve amount (aman pemisah ribuan Indonesia "Rp 150.000")
           const amountRaw = r["jumlah (rp)"] || r["jumlah"] || "0";
           const amount = Math.abs(parseBankStatementAmount(amountRaw));
           if (!Number.isFinite(amount) || amount <= 0) {
@@ -560,7 +499,7 @@ export const parseFinanceImportFile = (
             date: dateISO,
             type,
             category: r["kategori"] || "Lainnya",
-            description: r["keterangan"] || "",
+            description: r["keterangan"] || r["deskripsi"] || "",
             amount,
           });
         });
@@ -574,7 +513,9 @@ export const parseFinanceImportFile = (
   });
 };
 
-export const exportPayrollToXlsx = ({
+// ─── Export Payroll, Attendance & KPI to XLSX ─────────────────────────────────
+
+export const exportPayrollToXlsx = async ({
   payroll,
   employees,
   settings,
@@ -585,60 +526,104 @@ export const exportPayrollToXlsx = ({
   settings: Settings;
   periodLabel: string;
 }) => {
-  const wb = XLSX.utils.book_new();
+  const brandName = settings.brandName || "Julia's • Specialty Room • Coffee • Eatery";
+  const totalNet = Math.round(payroll.reduce((s, p) => s + (Number(p.netPay) || 0), 0));
+  const totalBasic = Math.round(payroll.reduce((s, p) => s + (Number(p.basicSalary) || 0), 0));
+  const totalKpi = Math.round(payroll.reduce((s, p) => s + (Number(p.kpiBonus) || 0), 0));
 
-  const dataRows = payroll.map((p, idx) => {
-    const emp = employees.find((e) => e.id === p.employeeId);
-    return {
-      No: idx + 1,
-      "Nama Karyawan": emp?.name || p.employeeId,
-      Jabatan: emp?.position || "-",
-      Divisi: emp?.department || "-",
-      Periode: p.period,
-      "Gaji Pokok (Rp)": p.basicSalary,
-      "Tunj. Jabatan (Rp)": p.positionAllowance,
-      "Uang Makan (Rp)": p.mealAllowance,
-      "Transport (Rp)": p.transportAllowance || 0,
-      "Bonus KPI (Rp)": p.kpiBonus,
-      "Bonus Target (Rp)": p.targetBonus || 0,
-      "Lembur (Rp)": p.overtimePay || 0,
-      "Potongan Alpha (Rp)": p.alphaDeduction,
-      "Potongan Lain (Rp)": p.otherDeductions || 0,
-      "Take Home Pay (Rp)": p.netPay,
-      Status: p.status,
-      "Tgl Dibayar": p.paidDate ? toDateIndo(p.paidDate) : "-",
-    };
+  await buildStyledWorkbook({
+    filename: `Laporan_Penggajian_${periodLabel.replace(/\s+/g, "_")}`,
+    brandName,
+    sheets: [
+      {
+        name: "Rekap Penggajian",
+        title: "Laporan Rekapitulasi Penggajian & Bonus",
+        subtitle: `${brandName} • Periode: ${periodLabel} • ${payroll.length} slip`,
+        headers: [
+          "No",
+          "Nama Karyawan",
+          "Jabatan",
+          "Divisi",
+          "Periode",
+          "Gaji Pokok (Rp)",
+          "Tunj. Jabatan (Rp)",
+          "Uang Makan (Rp)",
+          "Transport (Rp)",
+          "Bonus KPI (Rp)",
+          "Bonus Target (Rp)",
+          "Lembur (Rp)",
+          "Potongan Alpha (Rp)",
+          "Potongan Lain (Rp)",
+          "Take Home Pay (Rp)",
+          "Status",
+          "Tgl Dibayar",
+        ],
+        rows: payroll.map((p, idx) => {
+          const emp = employees.find((e) => e.id === p.employeeId);
+          return [
+            idx + 1,
+            emp?.name || p.employeeId,
+            emp?.position || "-",
+            emp?.department || "-",
+            p.period,
+            Math.round(p.basicSalary || 0),
+            Math.round(p.positionAllowance || 0),
+            Math.round(p.mealAllowance || 0),
+            Math.round(p.transportAllowance || 0),
+            Math.round(p.kpiBonus || 0),
+            Math.round(p.targetBonus || 0),
+            Math.round(p.overtimePay || 0),
+            Math.round(p.alphaDeduction || 0),
+            Math.round(p.otherDeductions || 0),
+            Math.round(p.netPay || 0),
+            p.status,
+            p.paidDate ? toDateIndo(p.paidDate) : "-",
+          ];
+        }),
+        columnFormats: [
+          "integer",
+          "text",
+          "text",
+          "text",
+          "text",
+          "currency",
+          "currency",
+          "currency",
+          "currency",
+          "currency",
+          "currency",
+          "currency",
+          "currency",
+          "currency",
+          "currency",
+          "text",
+          "text",
+        ],
+        totalRow: [
+          "",
+          "TOTAL",
+          "",
+          "",
+          "",
+          totalBasic,
+          "",
+          "",
+          "",
+          totalKpi,
+          "",
+          "",
+          "",
+          "",
+          totalNet,
+          "",
+          "",
+        ],
+      },
+    ],
   });
-
-  const ws = XLSX.utils.json_to_sheet(dataRows);
-  const cols = 16;
-  boldFirstRow(ws, cols);
-  styleDataRows(ws, 1, dataRows.length, cols);
-
-  ws["!cols"] = [
-    { wch: 5 },
-    { wch: 22 },
-    { wch: 15 },
-    { wch: 12 },
-    { wch: 10 },
-    { wch: 15 },
-    { wch: 15 },
-    { wch: 14 },
-    { wch: 14 },
-    { wch: 15 },
-    { wch: 13 },
-    { wch: 16 },
-    { wch: 15 },
-    { wch: 18 },
-    { wch: 10 },
-    { wch: 14 },
-  ];
-
-  XLSX.utils.book_append_sheet(wb, ws, "Rekap Penggajian");
-  XLSX.writeFile(wb, `Laporan_Penggajian_${periodLabel.replace(/\s+/g, "_")}.xlsx`);
 };
 
-export const exportAttendanceToXlsx = ({
+export const exportAttendanceToXlsx = async ({
   attendances,
   employees,
   settings,
@@ -649,8 +634,7 @@ export const exportAttendanceToXlsx = ({
   settings: Settings;
   periodLabel: string;
 }) => {
-  const wb = XLSX.utils.book_new();
-
+  const brandName = settings.brandName || "Julia's • Specialty Room • Coffee • Eatery";
   const empMap = new Map<string, { present: number; late: number; sick: number; alpha: number; totalHours: number }>();
   attendances.forEach((att) => {
     const prev = empMap.get(att.employeeId) || { present: 0, late: 0, sick: 0, alpha: 0, totalHours: 0 };
@@ -668,47 +652,63 @@ export const exportAttendanceToXlsx = ({
     empMap.set(att.employeeId, prev);
   });
 
-  const dataRows = Array.from(empMap.entries()).map(([empId, stats], idx) => {
+  const rows = Array.from(empMap.entries()).map(([empId, stats], idx) => {
     const emp = employees.find((e) => e.id === empId);
     const totalDays = stats.present + stats.sick + stats.alpha;
-    const rate = totalDays > 0 ? Math.round((stats.present / totalDays) * 100) : 0;
-    return {
-      No: idx + 1,
-      "Nama Karyawan": emp?.name || empId,
-      Jabatan: emp?.position || "-",
-      Divisi: emp?.department || "-",
-      "Hadir (Hari)": stats.present,
-      "Terlambat (Kali)": stats.late,
-      "Izin / Sakit (Hari)": stats.sick,
-      "Alpha (Hari)": stats.alpha,
-      "Total Jam Kerja": parseFloat(stats.totalHours.toFixed(1)),
-      "Persentase Kehadiran (%)": `${rate}%`,
-    };
+    const rate = totalDays > 0 ? stats.present / totalDays : 0;
+    return [
+      idx + 1,
+      emp?.name || empId,
+      emp?.position || "-",
+      emp?.department || "-",
+      stats.present,
+      stats.late,
+      stats.sick,
+      stats.alpha,
+      parseFloat(stats.totalHours.toFixed(1)),
+      rate,
+    ];
   });
 
-  const ws = XLSX.utils.json_to_sheet(dataRows);
-  const cols = 10;
-  boldFirstRow(ws, cols);
-  styleDataRows(ws, 1, dataRows.length, cols);
-
-  ws["!cols"] = [
-    { wch: 5 },
-    { wch: 22 },
-    { wch: 15 },
-    { wch: 12 },
-    { wch: 13 },
-    { wch: 15 },
-    { wch: 16 },
-    { wch: 13 },
-    { wch: 16 },
-    { wch: 22 },
-  ];
-
-  XLSX.utils.book_append_sheet(wb, ws, "Rekap Absensi");
-  XLSX.writeFile(wb, `Laporan_Absensi_${periodLabel.replace(/\s+/g, "_")}.xlsx`);
+  await buildStyledWorkbook({
+    filename: `Laporan_Absensi_${periodLabel.replace(/\s+/g, "_")}`,
+    brandName,
+    sheets: [
+      {
+        name: "Rekap Absensi",
+        title: "Laporan Rekapitulasi Absensi & Jam Kerja",
+        subtitle: `${brandName} • Periode: ${periodLabel} • ${attendances.length} log presensi`,
+        headers: [
+          "No",
+          "Nama Karyawan",
+          "Jabatan",
+          "Divisi",
+          "Hadir (Hari)",
+          "Terlambat (Kali)",
+          "Izin / Sakit (Hari)",
+          "Alpha (Hari)",
+          "Total Jam Kerja",
+          "Persentase Hadir",
+        ],
+        rows,
+        columnFormats: [
+          "integer",
+          "text",
+          "text",
+          "text",
+          "integer",
+          "integer",
+          "integer",
+          "integer",
+          "number",
+          "percent",
+        ],
+      },
+    ],
+  });
 };
 
-export const exportKpiToXlsx = ({
+export const exportKpiToXlsx = async ({
   kpiRecords,
   employees,
   settings,
@@ -719,44 +719,55 @@ export const exportKpiToXlsx = ({
   settings: Settings;
   periodLabel: string;
 }) => {
-  const wb = XLSX.utils.book_new();
+  const brandName = settings.brandName || "Julia's • Specialty Room • Coffee • Eatery";
+  const totalBonus = Math.round(kpiRecords.reduce((s, k) => s + (Number(k.kpiBonus) || 0), 0));
 
-  const dataRows = kpiRecords.map((k, idx) => {
-    const emp = employees.find((e) => e.id === k.employeeId);
-    const grade =
-      k.totalScore >= 85 ? "Sangat Baik (A)" : k.totalScore >= 70 ? "Baik (B)" : k.totalScore >= 55 ? "Cukup (C)" : "Perlu Evaluasi (D)";
-    return {
-      No: idx + 1,
-      "Nama Karyawan": emp?.name || k.employeeId,
-      Jabatan: emp?.position || "-",
-      Divisi: emp?.department || "-",
-      Periode: (k as any).period || `${k.year}-${String(k.month).padStart(2, "0")}`,
-      "Total Skor (0-100)": k.totalScore,
-      "Predikat Grade": grade,
-      "Bonus KPI (Rp)": k.kpiBonus,
-      "Catatan Evaluator": k.notes || "-",
-    };
+  await buildStyledWorkbook({
+    filename: `Laporan_KPI_${periodLabel.replace(/\s+/g, "_")}`,
+    brandName,
+    sheets: [
+      {
+        name: "Capaian KPI",
+        title: "Laporan Evaluasi Kinerja KPI Karyawan",
+        subtitle: `${brandName} • Periode: ${periodLabel}`,
+        headers: [
+          "No",
+          "Nama Karyawan",
+          "Jabatan",
+          "Divisi",
+          "Periode",
+          "Total Skor (0-100)",
+          "Predikat Grade",
+          "Bonus KPI (Rp)",
+          "Catatan Evaluator",
+        ],
+        rows: kpiRecords.map((k, idx) => {
+          const emp = employees.find((e) => e.id === k.employeeId);
+          const grade =
+            k.totalScore >= 85
+              ? "Sangat Baik (A)"
+              : k.totalScore >= 70
+                ? "Baik (B)"
+                : k.totalScore >= 55
+                  ? "Cukup (C)"
+                  : "Perlu Evaluasi (D)";
+          return [
+            idx + 1,
+            emp?.name || k.employeeId,
+            emp?.position || "-",
+            emp?.department || "-",
+            (k as any).period || `${k.year}-${String(k.month).padStart(2, "0")}`,
+            Number(k.totalScore) || 0,
+            grade,
+            Math.round(Number(k.kpiBonus) || 0),
+            k.notes || "-",
+          ];
+        }),
+        columnFormats: ["integer", "text", "text", "text", "text", "number", "text", "currency", "text"],
+        totalRow: ["", "TOTAL BONUS KPI", "", "", "", "", "", totalBonus, ""],
+      },
+    ],
   });
-
-  const ws = XLSX.utils.json_to_sheet(dataRows);
-  const cols = 9;
-  boldFirstRow(ws, cols);
-  styleDataRows(ws, 1, dataRows.length, cols);
-
-  ws["!cols"] = [
-    { wch: 5 },
-    { wch: 22 },
-    { wch: 15 },
-    { wch: 12 },
-    { wch: 12 },
-    { wch: 16 },
-    { wch: 16 },
-    { wch: 16 },
-    { wch: 30 },
-  ];
-
-  XLSX.utils.book_append_sheet(wb, ws, "Capaian KPI");
-  XLSX.writeFile(wb, `Laporan_KPI_${periodLabel.replace(/\s+/g, "_")}.xlsx`);
 };
 
 // ─── Export All-in-One Master Executive Report to XLSX ─────────────────────────
@@ -775,7 +786,7 @@ export interface ExportMasterExecutiveOptions {
   expenseCategories?: ExpenseCategory[];
 }
 
-export const exportMasterExecutiveReportXlsx = ({
+export const exportMasterExecutiveReportXlsx = async ({
   sales,
   finance,
   ingredients,
@@ -786,34 +797,41 @@ export const exportMasterExecutiveReportXlsx = ({
   employees,
   settings,
   periodLabel,
-  expenseCategories = [],
 }: ExportMasterExecutiveOptions) => {
-  const wb = XLSX.utils.book_new();
-
-  // ─── 1. SHEET 1: RINGKASAN EKSEKUTIF (EXECUTIVE SUMMARY) ──────────────────────
-  const totalGrossSales = sales.reduce((sum, s) => sum + ((s as any).subtotal || getSaleTransactionAmount(s)), 0);
-  const totalDiscount = sales.reduce((sum, s) => sum + ((s as any).discount || 0), 0);
-  const totalNetSales = sales.reduce((sum, s) => sum + getSaleTransactionAmount(s), 0);
+  const brandName = settings.brandName || (settings as any).storeName || "Julia's • Specialty Room • Coffee • Eatery";
+  const totalGrossSales = Math.round(
+    sales.reduce((sum, s) => sum + ((s as any).subtotal || getSaleTransactionAmount(s)), 0)
+  );
+  const totalDiscount = Math.round(sales.reduce((sum, s) => sum + ((s as any).discount || 0), 0));
+  const totalNetSales = Math.round(sales.reduce((sum, s) => sum + getSaleTransactionAmount(s), 0));
   const totalSalesTransactions = sales.length;
   const aov = totalSalesTransactions > 0 ? Math.round(totalNetSales / totalSalesTransactions) : 0;
 
   const operationalFinance = finance.filter((f) => !isNonOperationalCashTransaction(f));
-  const totalCashIn = operationalFinance
-    .filter((f) => (f.type as string) === "IN" || (f as any).type === "INCOME" || f.type === "CASH_IN")
-    .reduce((sum, f) => sum + (f.amount || 0), 0);
-  const totalCashOut = operationalFinance
-    .filter((f) => (f.type as string) === "OUT" || (f as any).type === "EXPENSE" || f.type === "CASH_OUT")
-    .reduce((sum, f) => sum + (f.amount || 0), 0);
+  const totalCashIn = Math.round(
+    operationalFinance
+      .filter((f) => (f.type as string) === "IN" || (f as any).type === "INCOME" || f.type === "CASH_IN")
+      .reduce((sum, f) => sum + (f.amount || 0), 0)
+  );
+  const totalCashOut = Math.round(
+    operationalFinance
+      .filter((f) => (f.type as string) === "OUT" || (f as any).type === "EXPENSE" || f.type === "CASH_OUT")
+      .reduce((sum, f) => sum + (f.amount || 0), 0)
+  );
 
-  const totalPayrollCost = payroll.reduce((sum, p) => sum + (p.netPay || p.grossPay || 0), 0);
+  const totalPayrollCost = Math.round(payroll.reduce((sum, p) => sum + (p.netPay || p.grossPay || 0), 0));
   const estimatedOperatingProfit = totalNetSales - totalCashOut - totalPayrollCost;
 
-  const totalInventoryAssetValue = ingredients.reduce((sum, ing) => {
-    const cost = ing.costPerUnit || (ing as any).unitPrice || (ing as any).price || 0;
-    const stockQty = ing.currentStock ?? (ing as any).stock ?? 0;
-    return sum + (cost * stockQty);
-  }, 0);
-  const lowStockCount = ingredients.filter((ing) => (ing.currentStock ?? (ing as any).stock ?? 0) <= (ing.minStock || 0)).length;
+  const totalInventoryAssetValue = Math.round(
+    ingredients.reduce((sum, ing) => {
+      const cost = ing.costPerUnit || (ing as any).unitPrice || (ing as any).price || 0;
+      const stockQty = ing.currentStock ?? (ing as any).stock ?? 0;
+      return sum + cost * stockQty;
+    }, 0)
+  );
+  const lowStockCount = ingredients.filter(
+    (ing) => (ing.currentStock ?? (ing as any).stock ?? 0) <= (ing.minStock || 0)
+  ).length;
 
   const totalPresentLogs = attendances.filter((a) => {
     const cls = classifyDailyAttendanceStatus(a);
@@ -821,183 +839,161 @@ export const exportMasterExecutiveReportXlsx = ({
   }).length;
   const attendanceRate = attendances.length > 0 ? Math.round((totalPresentLogs / attendances.length) * 100) : 100;
 
-  const summaryRows = [
-    { Kategori: "INFORMASI LAPORAN", Indikator: "Nama Usaha / Outlet", Nilai: settings.brandName || (settings as any).storeName || "Julia Coffee", Keterangan: "-" },
-    { Kategori: "INFORMASI LAPORAN", Indikator: "Periode Laporan", Nilai: periodLabel, Keterangan: "-" },
-    { Kategori: "INFORMASI LAPORAN", Indikator: "Tanggal Pembuatan Laporan", Nilai: toDateIndo(new Date()), Keterangan: "Diekspor otomatis dari sistem" },
-    { Kategori: "INFORMASI LAPORAN", Indikator: "Mata Uang", Nilai: (settings as any).currency || "IDR", Keterangan: "Rupiah Indonesia" },
-
-    { Kategori: "RINGKASAN PENJUALAN", Indikator: "Total Omzet Penjualan Kotor", Nilai: totalGrossSales, Keterangan: "Subtotal sebelum diskon" },
-    { Kategori: "RINGKASAN PENJUALAN", Indikator: "Total Diskon & Promo", Nilai: totalDiscount, Keterangan: "Potongan harga yang diberikan" },
-    { Kategori: "RINGKASAN PENJUALAN", Indikator: "Total Penjualan Bersih (Net Sales)", Nilai: totalNetSales, Keterangan: "Total penerimaan penjualan riil" },
-    { Kategori: "RINGKASAN PENJUALAN", Indikator: "Total Struk / Transaksi", Nilai: totalSalesTransactions, Keterangan: "Jumlah transaksi berhasil" },
-    { Kategori: "RINGKASAN PENJUALAN", Indikator: "Average Order Value (AOV)", Nilai: aov, Keterangan: "Rata-rata belanja per struk" },
-
-    { Kategori: "RINGKASAN ARUS KAS", Indikator: "Total Kas Masuk Non-Sales", Nilai: totalCashIn, Keterangan: "Penerimaan kas di luar kasir" },
-    { Kategori: "RINGKASAN ARUS KAS", Indikator: "Total Pengeluaran Kas Operasional", Nilai: totalCashOut, Keterangan: "Beban belanja operasional & utilitas" },
-
-    { Kategori: "BEBAN SDM & PAYROLL", Indikator: "Total Beban Gaji & Upah (Payroll)", Nilai: totalPayrollCost, Keterangan: "Total take home pay karyawan" },
-    { Kategori: "BEBAN SDM & PAYROLL", Indikator: "Jumlah Karyawan Terbayar", Nilai: payroll.length, Keterangan: "Slip gaji yang diproses" },
-
-    { Kategori: "PROFITABILITAS OPERASIONAL", Indikator: "Estimasi Laba Bersih Operasional", Nilai: estimatedOperatingProfit, Keterangan: "Net Sales - Biaya Kas Keluar - Beban Payroll" },
-
-    { Kategori: "INVENTARIS & STOK", Indikator: "Total Item Bahan Baku Aktif", Nilai: ingredients.length, Keterangan: "Jumlah varian bahan baku" },
-    { Kategori: "INVENTARIS & STOK", Indikator: "Estimasi Nilai Aset Bahan Baku", Nilai: totalInventoryAssetValue, Keterangan: "Stok tersedia x Estimasi HPP" },
-    { Kategori: "INVENTARIS & STOK", Indikator: "Item Bahan Perlu Restock", Nilai: lowStockCount, Keterangan: "Stok saat ini <= Batas Minimum" },
-
-    { Kategori: "DISIPLIN KEHADIRAN", Indikator: "Total Catatan Presensi Shift", Nilai: attendances.length, Keterangan: "Catatan Clock In/Out" },
-    { Kategori: "DISIPLIN KEHADIRAN", Indikator: "Total Kehadiran Kerja", Nilai: totalPresentLogs, Keterangan: "Shift berstatus Hadir/Terlambat" },
-    { Kategori: "DISIPLIN KEHADIRAN", Indikator: "Tingkat Kehadiran (Disiplin)", Nilai: `${attendanceRate}%`, Keterangan: "Persentase kehadiran shift" },
-  ];
-
-  const wsSummary = XLSX.utils.json_to_sheet(summaryRows);
-  boldFirstRow(wsSummary, 4);
-  styleDataRows(wsSummary, 1, summaryRows.length, 4);
-  wsSummary["!cols"] = [{ wch: 28 }, { wch: 35 }, { wch: 22 }, { wch: 38 }];
-  XLSX.utils.book_append_sheet(wb, wsSummary, "Ringkasan Eksekutif");
-
-  // ─── 2. SHEET 2: PENJUALAN (SALES) ──────────────────────────────────────────
-  const salesRows = sales.map((s, idx) => ({
-    No: idx + 1,
-    Tanggal: toDateIndo(s.date || (s as any).createdAt),
-    "No. Receipt": (s as any).receiptNumber || (s as any).invoiceNumber || s.id,
-    "Metode Pembayaran": (s as any).paymentMethod || "TUNAI",
-    Kasir: (s as any).cashierName || (s as any).servedBy || "-",
-    Subtotal: (s as any).subtotal || (s as any).total || s.totalPrice || 0,
-    Diskon: (s as any).discount || 0,
-    Pajak: (s as any).tax || 0,
-    "Total Bayar (Rp)": (s as any).total || s.totalPrice || 0,
-    Status: (s as any).status || "COMPLETED",
-  }));
-  const wsSales = XLSX.utils.json_to_sheet(salesRows);
-  boldFirstRow(wsSales, 10);
-  styleDataRows(wsSales, 1, salesRows.length, 10);
-  wsSales["!cols"] = [{ wch: 5 }, { wch: 14 }, { wch: 22 }, { wch: 18 }, { wch: 18 }, { wch: 15 }, { wch: 12 }, { wch: 12 }, { wch: 16 }, { wch: 14 }];
-  XLSX.utils.book_append_sheet(wb, wsSales, "Penjualan (Sales)");
-
-  // ─── 3. SHEET 3: ARUS KAS (FINANCE) ─────────────────────────────────────────
-  const financeRows = finance.map((f, idx) => ({
-    No: idx + 1,
-    Tanggal: toDateIndo(f.date || (f as any).createdAt),
-    Tipe: (f.type as string) === "IN" || (f as any).type === "INCOME" || f.type === "CASH_IN" ? "Pemasukan (IN)" : "Pengeluaran (OUT)",
-    Kategori: f.category || (f as any).categoryName || "-",
-    Keterangan: f.description || (f as any).notes || "-",
-    "Akun Kas/Bank": (f as any).accountId || (f as any).accountName || "Kas Utama",
-    "Jumlah (Rp)": f.amount || 0,
-    "Dicatat Oleh": (f as any).createdBy || "-",
-  }));
-  const wsFinance = XLSX.utils.json_to_sheet(financeRows);
-  boldFirstRow(wsFinance, 8);
-  styleDataRows(wsFinance, 1, financeRows.length, 8);
-  wsFinance["!cols"] = [{ wch: 5 }, { wch: 14 }, { wch: 18 }, { wch: 20 }, { wch: 32 }, { wch: 18 }, { wch: 16 }, { wch: 18 }];
-  XLSX.utils.book_append_sheet(wb, wsFinance, "Arus Kas (Finance)");
-
-  // ─── 4. SHEET 4: INVENTARIS & BAHAN (INVENTORY) ──────────────────────────────
-  const inventoryRows = ingredients.map((ing, idx) => {
-    const cost = ing.costPerUnit || (ing as any).unitPrice || (ing as any).price || 0;
-    const stockQty = ing.currentStock ?? (ing as any).stock ?? 0;
-    const assetVal = cost * stockQty;
-    const isLow = stockQty <= (ing.minStock || 0);
-    return {
-      No: idx + 1,
-      "Nama Bahan": ing.name,
-      Kategori: ing.category || "Bahan Baku",
-      "Stok Saat Ini": stockQty,
-      Satuan: ing.unit,
-      "Stok Minimum": ing.minStock || 0,
-      "Biaya Satuan HPP (Rp)": cost,
-      "Nilai Aset Stok (Rp)": assetVal,
-      "Status Stok": isLow ? "MENIPIS / ORDER ULANG" : "AMAN",
-    };
-  });
-  const wsInventory = XLSX.utils.json_to_sheet(inventoryRows);
-  boldFirstRow(wsInventory, 9);
-  styleDataRows(wsInventory, 1, inventoryRows.length, 9);
-  wsInventory["!cols"] = [{ wch: 5 }, { wch: 26 }, { wch: 18 }, { wch: 14 }, { wch: 10 }, { wch: 14 }, { wch: 20 }, { wch: 20 }, { wch: 22 }];
-  XLSX.utils.book_append_sheet(wb, wsInventory, "Stok Bahan (Inventory)");
-
-  // ─── 5. SHEET 5: PENGGAJIAN (PAYROLL) ───────────────────────────────────────
-  const payrollRows = payroll.map((p, idx) => {
-    const emp = employees.find((e) => e.id === p.employeeId);
-    return {
-      No: idx + 1,
-      "Nama Karyawan": emp?.name || p.employeeId,
-      Jabatan: emp?.position || "-",
-      Divisi: emp?.department || "-",
-      Periode: p.period,
-      "Gaji Pokok": p.basicSalary || 0,
-      Tunjangan: (p.positionAllowance || 0) + (p.mealAllowance || 0) + (p.transportAllowance || 0),
-      "Bonus KPI": p.kpiBonus || 0,
-      "Bonus Target Omzet": p.targetBonus || 0,
-      "Potongan Alpha": p.alphaDeduction || 0,
-      "Take Home Pay (Rp)": p.netPay || 0,
-      Status: p.status || "DRAFT",
-    };
-  });
-  const wsPayroll = XLSX.utils.json_to_sheet(payrollRows);
-  boldFirstRow(wsPayroll, 12);
-  styleDataRows(wsPayroll, 1, payrollRows.length, 12);
-  wsPayroll["!cols"] = [{ wch: 5 }, { wch: 22 }, { wch: 16 }, { wch: 14 }, { wch: 12 }, { wch: 16 }, { wch: 16 }, { wch: 14 }, { wch: 16 }, { wch: 14 }, { wch: 18 }, { wch: 12 }];
-  XLSX.utils.book_append_sheet(wb, wsPayroll, "Penggajian (Payroll)");
-
-  // ─── 6. SHEET 6: ABSENSI & KEHADIRAN (ATTENDANCE) ───────────────────────────
-  const attendanceRows = attendances.map((a, idx) => {
-    const emp = employees.find((e) => e.id === a.employeeId);
-    const cls = classifyDailyAttendanceStatus(a);
-    const durHours = (cls === "HADIR" || cls === "TERLAMBAT")
-      ? calculateWorkDurationHours(a.clockInTime, a.clockOutTime)
-      : 0;
-    const dur = durHours > 0 ? `${durHours.toFixed(1)} Jam` : "-";
-    return {
-      No: idx + 1,
-      Tanggal: a.date,
-      "Nama Karyawan": emp?.name || a.employeeId,
-      Jabatan: emp?.position || "-",
-      "Jam Masuk": a.clockInTime ? new Date(a.clockInTime).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", timeZone: DEFAULT_STORE_TIMEZONE }) : "-",
-      "Jam Pulang": a.clockOutTime ? new Date(a.clockOutTime).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", timeZone: DEFAULT_STORE_TIMEZONE }) : "-",
-      Durasi: dur,
-      Status: a.status,
-      "Verifikasi Manager": a.approvalStatus === "APPROVED" ? "Disahkan" : a.approvalStatus === "REJECTED" ? "Ditolak" : "Menunggu",
-      Catatan: a.notes || "-",
-    };
-  });
-  const wsAttendance = XLSX.utils.json_to_sheet(attendanceRows);
-  boldFirstRow(wsAttendance, 10);
-  styleDataRows(wsAttendance, 1, attendanceRows.length, 10);
-  wsAttendance["!cols"] = [{ wch: 5 }, { wch: 14 }, { wch: 22 }, { wch: 16 }, { wch: 13 }, { wch: 13 }, { wch: 12 }, { wch: 14 }, { wch: 18 }, { wch: 28 }];
-  XLSX.utils.book_append_sheet(wb, wsAttendance, "Kehadiran (Attendance)");
-
-  // ─── 7. SHEET 7: CAPAIAN KPI & KINERJA (KPI) ────────────────────────────────
-  const kpiRows = kpiRecords.map((k, idx) => {
-    const emp = employees.find((e) => e.id === k.employeeId);
-    const grade = k.totalScore >= 85 ? "Sangat Baik (A)" : k.totalScore >= 70 ? "Baik (B)" : k.totalScore >= 55 ? "Cukup (C)" : "Perlu Evaluasi (D)";
-    return {
-      No: idx + 1,
-      "Nama Karyawan": emp?.name || k.employeeId,
-      Jabatan: emp?.position || "-",
-      Divisi: emp?.department || "-",
-      Periode: (k as any).period || `${k.year}-${String(k.month).padStart(2, "0")}`,
-      "Skor KPI (0-100)": k.totalScore,
-      Grade: grade,
-      "Bonus KPI (Rp)": k.kpiBonus,
-      "Catatan Evaluator": k.notes || "-",
-    };
-  });
-  const wsKpi = XLSX.utils.json_to_sheet(kpiRows);
-  boldFirstRow(wsKpi, 9);
-  styleDataRows(wsKpi, 1, kpiRows.length, 9);
-  wsKpi["!cols"] = [{ wch: 5 }, { wch: 22 }, { wch: 16 }, { wch: 14 }, { wch: 12 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 28 }];
-  XLSX.utils.book_append_sheet(wb, wsKpi, "Kinerja KPI");
-
-  // Simpan File Master Workbook Multi-Sheet
-  const storeSlug = (settings.brandName || (settings as any).storeName || "Julia_Coffee").replace(/\s+/g, "_");
+  const storeSlug = brandName.replace(/[^a-zA-Z0-9]+/g, "_");
   const periodSlug = periodLabel.replace(/\s+/g, "_");
-  XLSX.writeFile(wb, `Laporan_Komprehensif_${storeSlug}_${periodSlug}.xlsx`);
+
+  await buildStyledWorkbook({
+    filename: `Laporan_Komprehensif_${storeSlug}_${periodSlug}`,
+    brandName,
+    sheets: [
+      {
+        name: "Ringkasan Eksekutif",
+        title: "Laporan Master Eksekutif (All-in-One)",
+        subtitle: `${brandName} • Periode: ${periodLabel}`,
+        headers: ["Kategori", "Indikator", "Nilai", "Keterangan"],
+        rows: [
+          ["INFORMASI", "Nama Usaha / Outlet", brandName, "-"],
+          ["INFORMASI", "Periode Laporan", periodLabel, "-"],
+          ["PENJUALAN", "Omzet Kotor (Gross Sales)", totalGrossSales, "Subtotal sebelum diskon"],
+          ["PENJUALAN", "Total Diskon & Promo", totalDiscount, "Potongan harga"],
+          ["PENJUALAN", "Penjualan Bersih (Net Sales)", totalNetSales, `${totalSalesTransactions} transaksi`],
+          ["PENJUALAN", "Average Order Value (AOV)", aov, "Rata-rata per transaksi"],
+          ["ARUS KAS", "Kas Masuk Operasional", totalCashIn, "Penerimaan kas tercatat"],
+          ["ARUS KAS", "Pengeluaran Operasional", totalCashOut, "Beban belanja & utilitas"],
+          ["PAYROLL", "Total Beban Gaji (THP)", totalPayrollCost, `${payroll.length} slip gaji`],
+          ["PROFITABILITAS", "Estimasi Laba Bersih Ops", estimatedOperatingProfit, "Net Sales - Kas Keluar - Payroll"],
+          ["INVENTARIS", "Jumlah Item Bahan Baku", ingredients.length, `${lowStockCount} stok menipis`],
+          ["INVENTARIS", "Estimasi Valuasi Aset Stok", totalInventoryAssetValue, "Stok tersedia x HPP"],
+          ["KEHADIRAN", "Catatan Presensi Shift", attendances.length, `${attendanceRate}% tingkat hadir`],
+        ],
+        columnFormats: ["text", "text", "text", "text"],
+      },
+      {
+        name: "Penjualan (Sales)",
+        title: "Rincian Penjualan Produk",
+        subtitle: `Periode: ${periodLabel}`,
+        headers: ["No", "Tanggal", "Nama Menu", "Qty", "Metode", "Total (Rp)"],
+        rows: sales.map((s, idx) => [
+          idx + 1,
+          toYmdSafe(s.date),
+          s.menuName,
+          Math.round(Number(s.quantitySold) || 0),
+          s.paymentMethod || "TUNAI",
+          Math.round(getSaleTransactionAmount(s)),
+        ]),
+        columnFormats: ["integer", "date", "text", "integer", "text", "currency"],
+        totalRow: ["", "TOTAL", `${sales.length} baris`, sales.reduce((a, b) => a + (b.quantitySold || 0), 0), "", totalNetSales],
+      },
+      {
+        name: "Arus Kas (Finance)",
+        title: "Rincian Arus Kas",
+        subtitle: `Periode: ${periodLabel}`,
+        headers: ["No", "Tanggal", "Tipe", "Kategori", "Keterangan", "Jumlah (Rp)"],
+        rows: finance.map((f, idx) => [
+          idx + 1,
+          toYmdSafe(f.date),
+          f.type === "CASH_IN" ? "Pemasukan" : "Pengeluaran",
+          f.category || "-",
+          f.description || "-",
+          Math.round(Number(f.amount) || 0),
+        ]),
+        columnFormats: ["integer", "date", "text", "text", "text", "currency"],
+      },
+      {
+        name: "Stok Bahan (Inventory)",
+        title: "Saldo Stok & Mutasi Bahan Baku",
+        subtitle: `${ingredients.length} bahan • ${movements.length} mutasi`,
+        headers: ["No", "Nama Bahan", "Kategori", "Stok Saat Ini", "Satuan", "Min Stok", "Modal/Unit (Rp)", "Nilai Aset (Rp)", "Status"],
+        rows: ingredients.map((ing, idx) => {
+          const cost = Math.round(Number(ing.costPerUnit) || 0);
+          const stockQty = Number(ing.currentStock) || 0;
+          return [
+            idx + 1,
+            ing.name,
+            ing.category || "-",
+            stockQty,
+            ing.unit,
+            Number(ing.minStock) || 0,
+            cost,
+            Math.round(cost * stockQty),
+            stockQty <= (ing.minStock || 0) ? "MENIPIS" : "AMAN",
+          ];
+        }),
+        columnFormats: ["integer", "text", "text", "number", "text", "number", "currency", "currency", "text"],
+        totalRow: ["", "TOTAL VALUASI ASET", "", "", "", "", "", totalInventoryAssetValue, ""],
+      },
+      {
+        name: "Penggajian (Payroll)",
+        title: "Rekapitulasi Penggajian Karyawan",
+        subtitle: `Periode: ${periodLabel}`,
+        headers: ["No", "Nama Karyawan", "Jabatan", "Periode", "Gaji Pokok", "Tunjangan", "Bonus KPI", "Potongan", "Take Home Pay", "Status"],
+        rows: payroll.map((p, idx) => {
+          const emp = employees.find((e) => e.id === p.employeeId);
+          return [
+            idx + 1,
+            emp?.name || p.employeeId,
+            emp?.position || "-",
+            p.period,
+            Math.round(p.basicSalary || 0),
+            Math.round((p.positionAllowance || 0) + (p.mealAllowance || 0) + (p.transportAllowance || 0)),
+            Math.round(p.kpiBonus || 0),
+            Math.round(p.alphaDeduction || 0),
+            Math.round(p.netPay || 0),
+            p.status || "DRAFT",
+          ];
+        }),
+        columnFormats: ["integer", "text", "text", "text", "currency", "currency", "currency", "currency", "currency", "text"],
+        totalRow: ["", "TOTAL PAYROLL", "", "", "", "", "", "", totalPayrollCost, ""],
+      },
+      {
+        name: "Kehadiran (Attendance)",
+        title: "Catatan Presensi Karyawan",
+        subtitle: `Periode: ${periodLabel}`,
+        headers: ["No", "Tanggal", "Nama Karyawan", "Jabatan", "Jam Masuk", "Jam Pulang", "Durasi (Jam)", "Status", "Verifikasi"],
+        rows: attendances.map((a, idx) => {
+          const emp = employees.find((e) => e.id === a.employeeId);
+          const cls = classifyDailyAttendanceStatus(a);
+          const durHours = cls === "HADIR" || cls === "TERLAMBAT" ? calculateWorkDurationHours(a.clockInTime, a.clockOutTime) : 0;
+          return [
+            idx + 1,
+            a.date,
+            emp?.name || a.employeeId,
+            emp?.position || "-",
+            a.clockInTime ? new Date(a.clockInTime).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", timeZone: DEFAULT_STORE_TIMEZONE }) : "-",
+            a.clockOutTime ? new Date(a.clockOutTime).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", timeZone: DEFAULT_STORE_TIMEZONE }) : "-",
+            parseFloat(durHours.toFixed(1)),
+            a.status,
+            a.approvalStatus === "APPROVED" ? "Disahkan" : a.approvalStatus === "REJECTED" ? "Ditolak" : "Menunggu",
+          ];
+        }),
+        columnFormats: ["integer", "date", "text", "text", "text", "text", "number", "text", "text"],
+      },
+      {
+        name: "Kinerja KPI",
+        title: "Evaluasi Kinerja KPI Karyawan",
+        subtitle: `Periode: ${periodLabel}`,
+        headers: ["No", "Nama Karyawan", "Jabatan", "Periode", "Skor (0-100)", "Bonus KPI (Rp)", "Catatan"],
+        rows: kpiRecords.map((k, idx) => {
+          const emp = employees.find((e) => e.id === k.employeeId);
+          return [
+            idx + 1,
+            emp?.name || k.employeeId,
+            emp?.position || "-",
+            (k as any).period || `${k.year}-${String(k.month).padStart(2, "0")}`,
+            Number(k.totalScore) || 0,
+            Math.round(Number(k.kpiBonus) || 0),
+            k.notes || "-",
+          ];
+        }),
+        columnFormats: ["integer", "text", "text", "text", "number", "currency", "text"],
+      },
+    ],
+  });
 };
 
 // ─── Export Daily Sales Recap to XLSX ──────────────────────────────────────────
 
-export const exportDailySalesRecapToXlsx = ({
+export const exportDailySalesRecapToXlsx = async ({
   recaps,
   settings,
   periodLabel = "Semua_Tanggal",
@@ -1006,124 +1002,119 @@ export const exportDailySalesRecapToXlsx = ({
   settings: Settings;
   periodLabel?: string;
 }) => {
-  const wb = XLSX.utils.book_new();
+  const brandName = settings.brandName || "Julia's • Specialty Room • Coffee • Eatery";
+  const totalCash = Math.round(recaps.reduce((acc, r) => acc + (r.cashAmount || 0), 0));
+  const totalQris = Math.round(recaps.reduce((acc, r) => acc + (r.qrisAmount || 0), 0));
+  const totalEdc = Math.round(recaps.reduce((acc, r) => acc + (r.edcAmount || 0), 0));
+  const totalTransfer = Math.round(recaps.reduce((acc, r) => acc + (r.transferAmount || 0), 0));
+  const totalOnline = Math.round(recaps.reduce((acc, r) => acc + (r.onlineDeliveryAmount || 0), 0));
+  const totalDiscount = Math.round(recaps.reduce((acc, r) => acc + (r.discountAmount || 0), 0));
+  const totalRefund = Math.round(recaps.reduce((acc, r) => acc + (r.refundAmount || 0), 0));
+  const totalMdr = Math.round(recaps.reduce((acc, r) => acc + (r.mdrFeeAmount || 0), 0));
+  const grandTotal = Math.round(recaps.reduce((acc, r) => acc + (r.totalAmount || 0), 0));
 
-  const totalCash = recaps.reduce((acc, r) => acc + (r.cashAmount || 0), 0);
-  const totalQris = recaps.reduce((acc, r) => acc + (r.qrisAmount || 0), 0);
-  const totalEdc = recaps.reduce((acc, r) => acc + (r.edcAmount || 0), 0);
-  const totalTransfer = recaps.reduce((acc, r) => acc + (r.transferAmount || 0), 0);
-  const totalOnline = recaps.reduce((acc, r) => acc + (r.onlineDeliveryAmount || 0), 0);
-  const totalDiscount = recaps.reduce((acc, r) => acc + (r.discountAmount || 0), 0);
-  const totalRefund = recaps.reduce((acc, r) => acc + (r.refundAmount || 0), 0);
-  const totalMdr = recaps.reduce((acc, r) => acc + (r.mdrFeeAmount || 0), 0);
-  const grandTotal = recaps.reduce((acc, r) => acc + (r.totalAmount || 0), 0);
-
-  const summaryData = [
-    ["LAPORAN REKAP PENJUALAN HARIAN", ""],
-    ["Unit Usaha", settings.brandName || "Julia Coffee"],
-    ["Periode / Filter", periodLabel],
-    ["Tanggal Unduh", new Date().toLocaleString("id-ID", { timeZone: DEFAULT_STORE_TIMEZONE })],
-    ["Total Catatan", recaps.length],
-    ["Total Tunai (Cash)", totalCash],
-    ["Total QRIS", totalQris],
-    ["Total Mesin EDC", totalEdc],
-    ["Total Transfer Bank", totalTransfer],
-    ["Total Ojol / Delivery (Bank)", totalOnline],
-    ["Total Diskon POS", totalDiscount],
-    ["Total Refund", totalRefund],
-    ["Total Potongan MDR", totalMdr],
-    ["Grand Total Omzet", grandTotal],
-  ];
-
-  const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
-  wsSummary["!cols"] = [{ wch: 28 }, { wch: 30 }];
-  boldFirstRow(wsSummary, 2);
-  XLSX.utils.book_append_sheet(wb, wsSummary, "Ringkasan");
-
-  const headers = [
-    "No",
-    "Tanggal",
-    "Shift",
-    "Tunai (Cash)",
-    "QRIS",
-    "Mesin EDC",
-    "Transfer Bank",
-    "Ojol / Delivery",
-    "Diskon POS",
-    "Refund",
-    "Biaya MDR",
-    "Status Non-Tunai",
-    "Total Omzet",
-    "Keterangan",
-    "Dicatat Oleh",
-  ];
-
-  const rows: any[][] = recaps.map((r, i) => [
-    i + 1,
-    r.date,
-    r.shift || "ALL",
-    r.cashAmount || 0,
-    r.qrisAmount || 0,
-    r.edcAmount || 0,
-    r.transferAmount || 0,
-    r.onlineDeliveryAmount || 0,
-    r.discountAmount || 0,
-    r.refundAmount || 0,
-    r.mdrFeeAmount || 0,
-    r.nonCashSettlementStatus === "PENDING" ? "Menunggu Cair" : "Sudah Masuk Bank",
-    r.totalAmount || 0,
-    r.notes || "-",
-    r.recordedBy || "Kasir",
-  ]);
-
-  // Baris Total di bagian akhir
-  rows.push([
-    "",
-    "TOTAL KESELURUHAN",
-    "",
-    totalCash,
-    totalQris,
-    totalEdc,
-    totalTransfer,
-    totalOnline,
-    totalDiscount,
-    totalRefund,
-    totalMdr,
-    "",
-    grandTotal,
-    "",
-    "",
-  ]);
-
-  const wsData = XLSX.utils.aoa_to_sheet([headers, ...rows]);
-  wsData["!cols"] = [
-    { wch: 6 },
-    { wch: 14 },
-    { wch: 10 },
-    { wch: 16 },
-    { wch: 16 },
-    { wch: 16 },
-    { wch: 16 },
-    { wch: 16 },
-    { wch: 14 },
-    { wch: 14 },
-    { wch: 14 },
-    { wch: 18 },
-    { wch: 18 },
-    { wch: 28 },
-    { wch: 16 },
-  ];
-
-  boldFirstRow(wsData, headers.length);
-  styleDataRows(wsData, 1, rows.length, headers.length);
-  XLSX.utils.book_append_sheet(wb, wsData, "Rekap Penjualan");
-
-  downloadXlsx(wb, `Rekap_Penjualan_Harian_${periodLabel.replace(/\s+/g, "_")}`);
+  await buildStyledWorkbook({
+    filename: `Rekap_Penjualan_Harian_${periodLabel.replace(/\s+/g, "_")}`,
+    brandName,
+    sheets: [
+      {
+        name: "Ringkasan",
+        title: "Ringkasan Rekap Omzet Harian",
+        subtitle: `${brandName} • Periode: ${periodLabel} • ${recaps.length} entri`,
+        headers: ["Kanal Pembayaran / Indikator", "Total (Rp)"],
+        rows: [
+          ["Tunai (Cash)", totalCash],
+          ["QRIS", totalQris],
+          ["Mesin EDC", totalEdc],
+          ["Transfer Bank", totalTransfer],
+          ["Online Delivery (Ojol)", totalOnline],
+          ["Total Diskon POS", totalDiscount],
+          ["Total Refund", totalRefund],
+          ["Total Biaya MDR", totalMdr],
+          ["Grand Total Omzet", grandTotal],
+        ],
+        columnFormats: ["text", "currency"],
+      },
+      {
+        name: "Rekap Penjualan",
+        title: "Rincian Rekap Omzet Harian",
+        subtitle: `Periode: ${periodLabel}`,
+        headers: [
+          "No",
+          "Tanggal",
+          "Shift",
+          "Tunai (Rp)",
+          "QRIS (Rp)",
+          "EDC (Rp)",
+          "Transfer (Rp)",
+          "Ojol (Rp)",
+          "Diskon (Rp)",
+          "Refund (Rp)",
+          "MDR (Rp)",
+          "Status Non-Tunai",
+          "Total Omzet (Rp)",
+          "Keterangan",
+          "Dicatat Oleh",
+        ],
+        rows: recaps.map((r, i) => [
+          i + 1,
+          toYmdSafe(r.date),
+          r.shift || "ALL",
+          Math.round(r.cashAmount || 0),
+          Math.round(r.qrisAmount || 0),
+          Math.round(r.edcAmount || 0),
+          Math.round(r.transferAmount || 0),
+          Math.round(r.onlineDeliveryAmount || 0),
+          Math.round(r.discountAmount || 0),
+          Math.round(r.refundAmount || 0),
+          Math.round(r.mdrFeeAmount || 0),
+          r.nonCashSettlementStatus === "PENDING" ? "Menunggu Cair" : "Sudah Masuk Bank",
+          Math.round(r.totalAmount || 0),
+          r.notes || "-",
+          r.recordedBy || "Kasir",
+        ]),
+        columnFormats: [
+          "integer",
+          "date",
+          "text",
+          "currency",
+          "currency",
+          "currency",
+          "currency",
+          "currency",
+          "currency",
+          "currency",
+          "currency",
+          "text",
+          "currency",
+          "text",
+          "text",
+        ],
+        totalRow: [
+          "",
+          "TOTAL",
+          "",
+          totalCash,
+          totalQris,
+          totalEdc,
+          totalTransfer,
+          totalOnline,
+          totalDiscount,
+          totalRefund,
+          totalMdr,
+          "",
+          grandTotal,
+          "",
+          "",
+        ],
+      },
+    ],
+  });
 };
 
 // ─── Export Dashboard Penjualan Produk (4 Sheet Analitik PMIX) ─────────────────
 
-export const exportProductSalesAnalyticsToXlsx = ({
+export const exportProductSalesAnalyticsToXlsx = async ({
   analytics,
   settings,
   periodLabel,
@@ -1132,192 +1123,429 @@ export const exportProductSalesAnalyticsToXlsx = ({
   settings: Settings;
   periodLabel: string;
 }) => {
-  const wb = XLSX.utils.book_new();
-  const brandName = settings.brandName || "Julia's Management System";
+  const brandName = settings.brandName || "Julia's • Specialty Room • Coffee • Eatery";
   const { kpiSummary, omzetCrossCheck } = analytics;
-
-  // Sheet 1: Ringkasan & Cross-Check
-  const summaryRows: any[][] = [
-    ["Laporan Penjualan Produk (PMIX)", brandName],
-    ["Periode / Filter", periodLabel],
-    ["Dicetak", toDateIndo(new Date())],
-    [],
-    ["RINGKASAN PERFORMA PRODUK", "Nilai"],
-    ["Total Produk Terjual (Cup/Porsi)", kpiSummary.totalQty],
-    ["Rata-rata Terjual per Hari", kpiSummary.avgDailyQty],
-    ["Total Omzet Produk (Rp)", kpiSummary.totalRevenue],
-    ["Estimasi Total HPP (Rp)", kpiSummary.totalHpp],
-    ["Estimasi Laba Kotor (Rp)", kpiSummary.grossProfit],
-    ["Rata-rata Gross Margin (%)", `${kpiSummary.marginPercent}%`],
-    ["Food Cost (%)", `${kpiSummary.foodCostPercent}%`],
-    [],
-    ["CROSS-CHECK REKAP OMZET HARIAN", "Nilai"],
-    ["Total Rekap Omzet Harian (Rp)", omzetCrossCheck.totalRecapOmzet],
-    ["Total Penjualan Produk Toko (Rp)", omzetCrossCheck.totalAllProductSales],
-    ["Selisih (Produk - Rekap Omzet) (Rp)", omzetCrossCheck.difference],
-    ["Tingkat Kecocokan (%)", `${omzetCrossCheck.matchPercent}%`],
-  ];
-  const wsSummary = XLSX.utils.aoa_to_sheet(summaryRows);
-  wsSummary["!cols"] = [{ wch: 36 }, { wch: 24 }];
-  [8, 9, 10, 15, 16, 17].forEach((rowIdx) => {
-    const addr = `B${rowIdx}`;
-    if (wsSummary[addr]) wsSummary[addr].z = "#,##0";
-  });
-  boldFirstRow(wsSummary, 2);
-  XLSX.utils.book_append_sheet(wb, wsSummary, "Ringkasan & Cross-Check");
-
-  // Sheet 2: Rekap Produk & Varian (PMIX)
-  const pmixHeaders = [
-    "No",
-    "Nama Produk",
-    "Rincian Varian",
-    "Divisi",
-    "Kategori Produk",
-    "Kategori Menu",
-    "Qty Terjual",
-    "% Share",
-    "Total Omzet (Rp)",
-    "Estimasi HPP (Rp)",
-    "Laba Kotor (Rp)",
-    "Margin (%)",
-    "Status Menu Engineering",
-  ];
   const quadLabels: Record<string, string> = {
     STAR: "Unggulan (Star)",
     PLOWHORSE: "Populer (Plowhorse)",
     PUZZLE: "Potensial (Puzzle)",
     DOG: "Evaluasi (Dog)",
   };
-  const pmixRows = analytics.productMixRows.map((row, idx) => [
-    idx + 1,
-    row.productName,
-    row.variantsBreakdown.map((v) => `${v.variantName} (${v.qtySold}x)`).join("; "),
-    row.division,
-    PRODUCT_GROUP_LABELS[row.productGroup] || row.productGroup,
-    row.menuCategory,
-    row.totalQty,
-    `${row.revenueSharePercent}%`,
-    row.totalRevenue,
-    row.totalHpp,
-    row.grossProfit,
-    `${row.marginPercent}%`,
-    quadLabels[row.quadrant] || row.quadrant,
-  ]);
-  const wsPmix = XLSX.utils.aoa_to_sheet([pmixHeaders, ...pmixRows]);
-  wsPmix["!cols"] = [
-    { wch: 6 },
-    { wch: 28 },
-    { wch: 34 },
-    { wch: 12 },
-    { wch: 20 },
-    { wch: 18 },
-    { wch: 12 },
-    { wch: 10 },
-    { wch: 18 },
-    { wch: 18 },
-    { wch: 18 },
-    { wch: 12 },
-    { wch: 22 },
-  ];
-  for (let i = 2; i <= pmixRows.length + 1; i++) {
-    ["I", "J", "K"].forEach((col) => {
-      if (wsPmix[`${col}${i}`]) wsPmix[`${col}${i}`].z = "#,##0";
-    });
-  }
-  boldFirstRow(wsPmix, pmixHeaders.length);
-  styleDataRows(wsPmix, 1, pmixRows.length, pmixHeaders.length);
-  XLSX.utils.book_append_sheet(wb, wsPmix, "Rekap Produk & Varian");
 
-  // Sheet 3: Pemakaian Bahan & Kemasan Teoretis
-  const ingHeaders = [
-    "No",
-    "Nama Bahan / Kemasan",
-    "Total Terpakai",
-    "Satuan",
-    "Biaya / Satuan (Rp)",
-    "Total Biaya (Rp)",
-    "Sisa Stok Gudang",
-    "Menu Pemakai",
-  ];
-  const ingRows = analytics.ingredientUsageSummary.map((ing, idx) => [
-    idx + 1,
-    ing.ingredientName,
-    ing.totalUsedQty,
-    ing.unit,
-    ing.unitCost,
-    ing.totalCost,
-    ing.currentStock,
-    ing.usedByMenus.join(", "),
-  ]);
-  const wsIng = XLSX.utils.aoa_to_sheet([ingHeaders, ...ingRows]);
-  wsIng["!cols"] = [
-    { wch: 6 },
-    { wch: 28 },
-    { wch: 15 },
-    { wch: 10 },
-    { wch: 18 },
-    { wch: 18 },
-    { wch: 16 },
-    { wch: 40 },
-  ];
-  for (let i = 2; i <= ingRows.length + 1; i++) {
-    ["E", "F"].forEach((col) => {
-      if (wsIng[`${col}${i}`]) wsIng[`${col}${i}`].z = "#,##0";
-    });
-  }
-  boldFirstRow(wsIng, ingHeaders.length);
-  styleDataRows(wsIng, 1, ingRows.length, ingHeaders.length);
-  XLSX.utils.book_append_sheet(wb, wsIng, "Pemakaian Bahan & Kemasan");
-
-  // Sheet 4: Rincian Transaksi Harian (tetap kompatibel untuk re-import)
-  const logHeaders = [
-    "Tanggal",
-    "Nama Menu",
-    "Varian",
-    "Divisi",
-    "Kategori Produk",
-    "Kategori Menu",
-    "Quantity",
-    "Total Penjualan",
-    "Est. HPP (Rp)",
-    "Laba Kotor (Rp)",
-  ];
-  const logRows = analytics.filteredTransactions.map((item) => [
-    item.localDate,
-    item.resolved.isMatched ? item.resolved.productName : item.tx.menuName,
-    item.resolved.variantName,
-    item.resolved.division,
-    PRODUCT_GROUP_LABELS[item.resolved.productGroup] || item.resolved.productGroup,
-    item.resolved.menuCategory,
-    item.quantity,
-    item.revenue,
-    item.totalHpp,
-    item.grossProfit,
-  ]);
-  const wsLog = XLSX.utils.aoa_to_sheet([logHeaders, ...logRows]);
-  wsLog["!cols"] = [
-    { wch: 14 },
-    { wch: 28 },
-    { wch: 18 },
-    { wch: 12 },
-    { wch: 20 },
-    { wch: 18 },
-    { wch: 12 },
-    { wch: 18 },
-    { wch: 16 },
-    { wch: 16 },
-  ];
-  for (let i = 2; i <= logRows.length + 1; i++) {
-    ["H", "I", "J"].forEach((col) => {
-      if (wsLog[`${col}${i}`]) wsLog[`${col}${i}`].z = "#,##0";
-    });
-  }
-  boldFirstRow(wsLog, logHeaders.length);
-  styleDataRows(wsLog, 1, logRows.length, logHeaders.length);
-  XLSX.utils.book_append_sheet(wb, wsLog, "Rincian Transaksi Harian");
-
-  downloadXlsx(wb, `Penjualan_Produk_${periodLabel.replace(/\s+/g, "_")}`);
+  await buildStyledWorkbook({
+    filename: `Penjualan_Produk_${periodLabel.replace(/\s+/g, "_")}`,
+    brandName,
+    sheets: [
+      {
+        name: "Ringkasan & Cross-Check",
+        title: "Analitik Penjualan Produk (PMIX) & Cross-Check Omzet",
+        subtitle: `${brandName} • Periode: ${periodLabel}`,
+        headers: ["Indikator Performa & Cross-Check", "Nilai"],
+        rows: [
+          ["Total Produk Terjual (Cup/Porsi)", kpiSummary.totalQty],
+          ["Rata-rata Terjual per Hari", kpiSummary.avgDailyQty],
+          ["Total Omzet Produk (Rp)", Math.round(kpiSummary.totalRevenue)],
+          ["Estimasi Total HPP (Rp)", Math.round(kpiSummary.totalHpp)],
+          ["Estimasi Laba Kotor (Rp)", Math.round(kpiSummary.grossProfit)],
+          ["Rata-rata Gross Margin (%)", `${kpiSummary.marginPercent}%`],
+          ["Food Cost (%)", `${kpiSummary.foodCostPercent}%`],
+          ["Total Rekap Omzet Harian (Rp)", Math.round(omzetCrossCheck.totalRecapOmzet)],
+          ["Total Penjualan Produk Toko (Rp)", Math.round(omzetCrossCheck.totalAllProductSales)],
+          ["Selisih Produk vs Rekap (Rp)", Math.round(omzetCrossCheck.difference)],
+          ["Tingkat Kecocokan (%)", `${omzetCrossCheck.matchPercent}%`],
+        ],
+        columnFormats: ["text", "text"],
+      },
+      {
+        name: "Rekap Produk & Varian",
+        title: "Rekapitulasi Menu Engineering & Varian",
+        subtitle: `Periode: ${periodLabel}`,
+        headers: [
+          "No",
+          "Nama Produk",
+          "Rincian Varian",
+          "Divisi",
+          "Kategori Produk",
+          "Kategori Menu",
+          "Qty Terjual",
+          "Share Omzet",
+          "Total Omzet (Rp)",
+          "Estimasi HPP (Rp)",
+          "Laba Kotor (Rp)",
+          "Margin",
+          "Status Menu",
+        ],
+        rows: analytics.productMixRows.map((row, idx) => [
+          idx + 1,
+          row.productName,
+          row.variantsBreakdown.map((v) => `${v.variantName} (${v.qtySold}x)`).join("; "),
+          row.division,
+          PRODUCT_GROUP_LABELS[row.productGroup] || row.productGroup,
+          row.menuCategory,
+          row.totalQty,
+          (Number(row.revenueSharePercent) || 0) / 100,
+          Math.round(row.totalRevenue),
+          Math.round(row.totalHpp),
+          Math.round(row.grossProfit),
+          (Number(row.marginPercent) || 0) / 100,
+          quadLabels[row.quadrant] || row.quadrant,
+        ]),
+        columnFormats: [
+          "integer",
+          "text",
+          "text",
+          "text",
+          "text",
+          "text",
+          "integer",
+          "percent",
+          "currency",
+          "currency",
+          "currency",
+          "percent",
+          "text",
+        ],
+        totalRow: [
+          "",
+          "TOTAL",
+          "",
+          "",
+          "",
+          "",
+          kpiSummary.totalQty,
+          1,
+          Math.round(kpiSummary.totalRevenue),
+          Math.round(kpiSummary.totalHpp),
+          Math.round(kpiSummary.grossProfit),
+          (Number(kpiSummary.marginPercent) || 0) / 100,
+          "",
+        ],
+      },
+      {
+        name: "Pemakaian Bahan",
+        title: "Estimasi Pemakaian Bahan & Kemasan Teoretis",
+        headers: [
+          "No",
+          "Nama Bahan / Kemasan",
+          "Total Terpakai",
+          "Satuan",
+          "Biaya / Satuan (Rp)",
+          "Total Biaya (Rp)",
+          "Sisa Stok Gudang",
+          "Menu Pemakai",
+        ],
+        rows: analytics.ingredientUsageSummary.map((ing, idx) => [
+          idx + 1,
+          ing.ingredientName,
+          ing.totalUsedQty,
+          ing.unit,
+          Math.round(ing.unitCost),
+          Math.round(ing.totalCost),
+          ing.currentStock,
+          ing.usedByMenus.join(", "),
+        ]),
+        columnFormats: ["integer", "text", "number", "text", "currency", "currency", "number", "text"],
+      },
+      {
+        name: "Rincian Transaksi",
+        title: "Log Transaksi Penjualan Produk",
+        headers: [
+          "Tanggal",
+          "Nama Menu",
+          "Varian",
+          "Divisi",
+          "Kategori Produk",
+          "Kategori Menu",
+          "Quantity",
+          "Total Penjualan",
+          "Est. HPP (Rp)",
+          "Laba Kotor (Rp)",
+        ],
+        rows: analytics.filteredTransactions.map((item) => [
+          item.localDate,
+          item.resolved.isMatched ? item.resolved.productName : item.tx.menuName,
+          item.resolved.variantName,
+          item.resolved.division,
+          PRODUCT_GROUP_LABELS[item.resolved.productGroup] || item.resolved.productGroup,
+          item.resolved.menuCategory,
+          item.quantity,
+          Math.round(item.revenue),
+          Math.round(item.totalHpp),
+          Math.round(item.grossProfit),
+        ]),
+        columnFormats: [
+          "date",
+          "text",
+          "text",
+          "text",
+          "text",
+          "text",
+          "integer",
+          "currency",
+          "currency",
+          "currency",
+        ],
+      },
+    ],
+  });
 };
 
+// ─── 3 Exporter Modul Tambahan (PO, Katalog Menu, Shift Kasir) ────────────────
 
+export const exportPurchaseOrdersToXlsx = async ({
+  purchaseOrders,
+  suppliers,
+  ingredients = [],
+  settings,
+  periodLabel,
+}: {
+  purchaseOrders: PurchaseOrder[];
+  suppliers: Supplier[];
+  ingredients?: Ingredient[];
+  settings: Settings;
+  periodLabel: string;
+}) => {
+  const brandName = settings.brandName || "Julia's • Specialty Room • Coffee • Eatery";
+  let totalAmountSum = 0;
+  let totalPaidSum = 0;
 
+  const summaryRows = purchaseOrders.map((po) => {
+    const sup = suppliers.find((s) => s.id === po.supplierId);
+    const total = Math.round(Number(po.totalAmount) || 0);
+    const paid = Math.round(Number(po.amountPaid) || 0);
+    totalAmountSum += total;
+    totalPaidSum += paid;
+    return [
+      po.poNumber,
+      toYmdSafe(po.date),
+      sup?.name || po.supplierName || "-",
+      po.purchaseType === "MARKET" ? "Belanja Pasar" : "PO Distributor",
+      total,
+      paid,
+      Math.max(0, total - paid),
+      po.status,
+      po.deliveryStatus,
+      po.dueDate ? toYmdSafe(po.dueDate) : "-",
+    ];
+  });
+
+  const itemRows = purchaseOrders.flatMap((po) => {
+    const sup = suppliers.find((s) => s.id === po.supplierId);
+    return (po.items || []).map((item) => {
+      const ingName =
+        ingredients.find((i) => i.id === item.productId)?.name || item.productId;
+      return [
+        po.poNumber,
+        toYmdSafe(po.date),
+        sup?.name || po.supplierName || "-",
+        ingName,
+        Number(item.quantity) || 0,
+        item.unit || "-",
+        Math.round(Number(item.unitPrice) || 0),
+        Math.round(Number(item.subtotal) || 0),
+      ];
+    });
+  });
+
+  await buildStyledWorkbook({
+    filename: `Laporan_Pembelian_PO_${periodLabel.replace(/\s+/g, "_")}`,
+    brandName,
+    sheets: [
+      {
+        name: "Ringkasan PO",
+        title: "Laporan Purchase Order & Hutang Supplier",
+        subtitle: `${brandName} • Periode: ${periodLabel}`,
+        headers: [
+          "No. PO",
+          "Tanggal",
+          "Supplier / Pasar",
+          "Jenis",
+          "Total Tagihan (Rp)",
+          "Sudah Dibayar (Rp)",
+          "Sisa Hutang (Rp)",
+          "Status Bayar",
+          "Status Terima",
+          "Jatuh Tempo",
+        ],
+        rows: summaryRows,
+        columnFormats: [
+          "text",
+          "date",
+          "text",
+          "text",
+          "currency",
+          "currency",
+          "currency",
+          "text",
+          "text",
+          "date",
+        ],
+        totalRow: [
+          "TOTAL",
+          "",
+          `${purchaseOrders.length} PO`,
+          "",
+          totalAmountSum,
+          totalPaidSum,
+          Math.max(0, totalAmountSum - totalPaidSum),
+          "",
+          "",
+          "",
+        ],
+      },
+      {
+        name: "Rincian Item PO",
+        title: "Rincian Bahan per Purchase Order",
+        headers: ["No. PO", "Tanggal", "Supplier", "Nama Bahan", "Qty", "Satuan", "Harga Satuan (Rp)", "Subtotal (Rp)"],
+        rows: itemRows,
+        columnFormats: ["text", "date", "text", "text", "number", "text", "currency", "currency"],
+        totalRow: ["", "", "", "TOTAL", "", "", "", totalAmountSum],
+      },
+    ],
+  });
+};
+
+export const exportMenuCatalogToXlsx = async ({
+  products,
+  settings,
+  periodLabel,
+}: {
+  products: Product[];
+  settings: Settings;
+  periodLabel: string;
+}) => {
+  const brandName = settings.brandName || "Julia's • Specialty Room • Coffee • Eatery";
+  const rows = products.flatMap((p) => {
+    const vars =
+      Array.isArray(p.variants) && p.variants.length > 0
+        ? p.variants
+        : [{ id: "-", productId: p.id, name: "Reguler", sku: "", price: 0, estimatedHpp: 0, packagingCost: 0, isAvailable: p.isActive }];
+    return vars.map((v) => {
+      const price = Math.round(Number(v.price) || 0);
+      const hpp = Math.round(Number(v.estimatedHpp) || 0);
+      const marginPct = price > 0 ? Math.max(-1, Math.min(1, (price - hpp) / price)) : 0;
+      return [
+        p.division,
+        p.productGroup || inferProductGroup(p.division, p.category, p.productGroup, v.name),
+        p.category,
+        p.name,
+        v.name,
+        v.sku || "-",
+        price,
+        hpp,
+        marginPct,
+        p.isActive && v.isAvailable !== false ? "AKTIF" : "NONAKTIF",
+      ];
+    });
+  });
+
+  await buildStyledWorkbook({
+    filename: `Katalog_Menu_HPP_${periodLabel.replace(/\s+/g, "_")}`,
+    brandName,
+    sheets: [
+      {
+        name: "Katalog Menu & HPP",
+        title: "Katalog Menu Resmi, Varian & Analisis HPP",
+        subtitle: `${brandName} • ${rows.length} varian menu`,
+        headers: [
+          "Divisi",
+          "Grup Produk",
+          "Kategori Menu",
+          "Nama Menu",
+          "Varian",
+          "SKU",
+          "Harga Jual (Rp)",
+          "Estimasi HPP (Rp)",
+          "Margin (%)",
+          "Status",
+        ],
+        rows,
+        columnFormats: [
+          "text",
+          "text",
+          "text",
+          "text",
+          "text",
+          "text",
+          "currency",
+          "currency",
+          "percent",
+          "text",
+        ],
+      },
+    ],
+  });
+};
+
+export const exportShiftsToXlsx = async ({
+  shifts,
+  settings,
+  periodLabel,
+}: {
+  shifts: ShiftSession[];
+  settings: Settings;
+  periodLabel: string;
+}) => {
+  const brandName = settings.brandName || "Julia's • Specialty Room • Coffee • Eatery";
+  let totalStart = 0;
+  let totalExp = 0;
+  let totalAct = 0;
+  let totalDiff = 0;
+
+  const rows = shifts.map((s) => {
+    const startCash = Math.round(Number(s.startingCash) || 0);
+    const expCash = Math.round(Number(s.expectedEndingCash) || 0);
+    const actCash = Math.round(Number(s.actualEndingCash) || 0);
+    const diff = Math.round(Number(s.difference) || 0);
+    totalStart += startCash;
+    totalExp += expCash;
+    totalAct += actCash;
+    totalDiff += diff;
+    return [
+      new Date(s.startTime).toLocaleString("id-ID", { timeZone: DEFAULT_STORE_TIMEZONE }),
+      s.endTime
+        ? new Date(s.endTime).toLocaleString("id-ID", { timeZone: DEFAULT_STORE_TIMEZONE })
+        : "-",
+      s.picEmployeeName || "-",
+      startCash,
+      expCash,
+      actCash,
+      diff,
+      s.status,
+    ];
+  });
+
+  await buildStyledWorkbook({
+    filename: `Riwayat_Shift_Kasir_${periodLabel.replace(/\s+/g, "_")}`,
+    brandName,
+    sheets: [
+      {
+        name: "Riwayat Shift Kasir",
+        title: "Laporan Riwayat & Rekonsiliasi Shift Kasir",
+        subtitle: `${brandName} • Periode: ${periodLabel} • ${shifts.length} shift`,
+        headers: [
+          "Waktu Buka (WITA)",
+          "Waktu Tutup (WITA)",
+          "PIC Shift",
+          "Modal Awal (Rp)",
+          "Kas Diharapkan (Rp)",
+          "Kas Aktual (Rp)",
+          "Selisih (Rp)",
+          "Status",
+        ],
+        rows,
+        columnFormats: [
+          "text",
+          "text",
+          "text",
+          "currency",
+          "currency",
+          "currency",
+          "currency",
+          "text",
+        ],
+        totalRow: ["TOTAL", "", `${shifts.length} Shift`, totalStart, totalExp, totalAct, totalDiff, ""],
+      },
+    ],
+  });
+};

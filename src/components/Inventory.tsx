@@ -70,9 +70,16 @@ import {
   FileSpreadsheet,
   AlertCircle,
   ShieldCheck,
+  Download,
+  Upload,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { CsvImportExport } from "./common/CsvImportExport";
+import { GenericImportModal } from "./common/GenericImportModal";
+import { buildStyledWorkbook, buildTemplateWithDropdown } from "../utils/excelTemplate";
+import { normalizeTextCode, parseLocalizedNumber } from "../utils/genericImport";
+import { buildRecipeImportPlan, parseOpnamePhysicalSheetRows } from "../utils/importHelpers";
+import { mergeDuplicateRecipeIngredients, validateRecipeSubmission } from "../utils/syncSanitizers";
 import { RecipeModal } from "./RecipeModal";
 import { CustomSelect } from "./common/CustomSelect";
 import { CurrencyInput } from "./common/CurrencyInput";
@@ -859,6 +866,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
   const [draftToDeleteId, setDraftToDeleteId] = useState<string | null>(null);
   const [isCancelOpnameConfirmOpen, setIsCancelOpnameConfirmOpen] = useState(false);
   const [isFinalizeOpnameConfirmOpen, setIsFinalizeOpnameConfirmOpen] = useState(false);
+  const [isOpnameImportModalOpen, setIsOpnameImportModalOpen] = useState(false);
 
   // Accessible ingredients according to user's station
   const accessibleIngredients = useMemo(() => {
@@ -1415,89 +1423,142 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
       }));
   }, [wasteMovements]);
 
-  // Export Waste Logs to CSV
-  const handleExportWasteCsv = () => {
+  // Export Waste Logs to Excel (.xlsx)
+  const handleExportWasteCsv = async () => {
     if (filteredWasteMovements.length === 0) {
       toast.warning("Tidak ada catatan waste untuk diekspor.");
       return;
     }
 
-    const headers = [
-      "Tanggal",
-      "Waktu",
-      "Kode Bahan",
-      "Nama Bahan",
-      "Kategori",
-      "Lokasi Simpan",
-      "Alasan Terstandar",
-      "Jumlah Terbuang",
-      "Satuan",
-      "Biaya Modal Satuan (Rp)",
-      "Total Nilai Kerugian (Rp)",
-      "Operator",
-      "Catatan",
-    ];
-
-    const rows = filteredWasteMovements.map((m) => {
-      const d = new Date(m.date);
+    const totalLoss = filteredWasteMovements.reduce((sum, m) => sum + Math.round(Number(m.totalCost) || 0), 0);
+    const summaryMap = new Map<string, { label: string; count: number; totalCost: number }>();
+    filteredWasteMovements.forEach((m) => {
       const reasonObj = WASTE_REASONS_DETAIL.find((r) => r.id === m.reasonKey);
-      return [
-        d.toLocaleDateString("id-ID"),
-        d.toLocaleTimeString("id-ID"),
-        m.ingredient?.code || "-",
-        m.ingredient?.name || "Bahan Terhapus",
-        m.ingredient?.category || "-",
-        m.ingredient?.storageLocation || "-",
-        reasonObj?.label || m.reasonKey,
-        m.actualQty,
-        m.ingredient?.unit || "unit",
-        m.unitCost,
-        m.totalCost,
-        m.createdBy || "-",
-        m.cleanNote || "-",
-      ];
+      const label = reasonObj?.label || m.reasonKey || "Lainnya";
+      const cur = summaryMap.get(label) || { label, count: 0, totalCost: 0 };
+      cur.count += 1;
+      cur.totalCost += Math.round(Number(m.totalCost) || 0);
+      summaryMap.set(label, cur);
     });
 
-    const csvLines = [
-      headers.join(","),
-      ...rows.map((row) =>
-        row.map((val) => `"${String(val).replace(/"/g, '""')}"`).join(",")
-      ),
-    ].join("\n");
-
-    const blob = new Blob(["\uFEFF" + csvLines], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", `laporan_waste_kerusakan_${getLocalDateString()}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-    toast.success(`${filteredWasteMovements.length} catatan waste berhasil diekspor ke CSV.`);
+    try {
+      await buildStyledWorkbook({
+        filename: `Laporan_Waste_Kerusakan_${getLocalDateString()}`,
+        sheets: [
+          {
+            name: "Ringkasan Alasan",
+            title: "Ringkasan Kerugian Bahan Baku (Waste)",
+            subtitle: `Total ${filteredWasteMovements.length} kejadian • Diekspor ${getLocalDateString()}`,
+            headers: ["Alasan Terstandar", "Jumlah Kejadian", "Total Kerugian (Rp)", "Porsi (%)"],
+            rows: Array.from(summaryMap.values())
+              .sort((a, b) => b.totalCost - a.totalCost)
+              .map((s) => [
+                s.label,
+                s.count,
+                s.totalCost,
+                totalLoss > 0 ? s.totalCost / totalLoss : 0,
+              ]),
+            columnFormats: ["text", "integer", "currency", "percent"],
+            totalRow: ["TOTAL", filteredWasteMovements.length, totalLoss, totalLoss > 0 ? 1 : 0],
+          },
+          {
+            name: "Log Detail Waste",
+            title: "Log Detail Bahan Terbuang / Rusak",
+            headers: [
+              "Tanggal",
+              "Waktu",
+              "Kode Bahan",
+              "Nama Bahan",
+              "Kategori",
+              "Lokasi Simpan",
+              "Alasan Terstandar",
+              "Jumlah Terbuang",
+              "Satuan",
+              "Modal Satuan (Rp)",
+              "Total Kerugian (Rp)",
+              "Operator",
+              "Catatan",
+            ],
+            rows: filteredWasteMovements.map((m) => {
+              const d = new Date(m.date);
+              const reasonObj = WASTE_REASONS_DETAIL.find((r) => r.id === m.reasonKey);
+              return [
+                getLocalDateString(d),
+                d.toLocaleTimeString("id-ID"),
+                m.ingredient?.code || "-",
+                m.ingredient?.name || "Bahan Terhapus",
+                m.ingredient?.category || "-",
+                m.ingredient?.storageLocation || "-",
+                reasonObj?.label || m.reasonKey,
+                m.actualQty,
+                m.ingredient?.unit || "unit",
+                Math.round(Number(m.unitCost) || 0),
+                Math.round(Number(m.totalCost) || 0),
+                m.createdBy || "-",
+                m.cleanNote || "-",
+              ];
+            }),
+            columnFormats: [
+              "date",
+              "text",
+              "text",
+              "text",
+              "text",
+              "text",
+              "text",
+              "number",
+              "text",
+              "currency",
+              "currency",
+              "text",
+              "text",
+            ],
+            totalRow: [
+              "",
+              "",
+              "",
+              "TOTAL NILAI KERUGIAN",
+              "",
+              "",
+              "",
+              "",
+              "",
+              "",
+              totalLoss,
+              "",
+              "",
+            ],
+          },
+        ],
+      });
+      toast.success(`${filteredWasteMovements.length} catatan waste berhasil diekspor ke Excel (.xlsx).`);
+    } catch (err: any) {
+      toast.error("Gagal mengekspor laporan waste: " + (err?.message || err));
+    }
   };
 
   // Import CSV / Excel
   const handleImportIngredients = (data: any[]) => {
-    if (isReadOnly || userRole === "LEADER") return;
+    if (isReadOnly || userRole === "LEADER") return { added: 0, updated: 0, skipped: data.length };
     let imported = 0;
     let updated = 0;
+    let skipped = 0;
 
     data.forEach((row) => {
-      const idSistem = row["ID_SISTEM (JANGAN DIUBAH)"] || row.id;
-      const code = row["Kode Bahan"] || row["Kode"] || row.code;
-      const name = row["Nama Bahan"] || row.name;
-      const category = row["Kategori"] || row.category || "Lainnya";
-      const storageLocation = row["Lokasi Simpan"] || row.storageLocation || "BAR";
+      const idSistem = normalizeTextCode(row["ID_SISTEM (JANGAN DIUBAH)"] || row.id);
+      const code = normalizeTextCode(row["Kode Bahan"] || row["Kode"] || row.code);
+      const name = String(row["Nama Bahan"] || row.name || "").trim();
+      const category = String(row["Kategori"] || row.category || "Lainnya").trim() || "Lainnya";
+      const storageLocation = String(row["Lokasi Simpan"] || row.storageLocation || "BAR").trim() || "BAR";
       const unit = (row["Satuan Resep (Terkecil)"] || row["Satuan"] || row.unit || "gr").toString().trim().toLowerCase();
-      const currentStock = Number(row["Stok Fisik Saat Ini"] ?? row["Stok Saat Ini"] ?? row.currentStock) || 0;
-      const minStock = Number(row["Batas Minimum (Alert)"] ?? row["Stok Minimum"] ?? row.minStock) || 0;
+      const currentStock = parseLocalizedNumber(row["Stok Fisik Saat Ini"] ?? row["Stok Saat Ini"] ?? row.currentStock);
+      const minStock = parseLocalizedNumber(row["Batas Minimum (Alert)"] ?? row["Stok Minimum"] ?? row.minStock);
 
       const purchaseUnit = row["Satuan Beli Supplier"] || row.purchaseUnit || undefined;
-      const conversionFactor = Number(row["Isi per Kemasan Beli"] || row.conversionFactor) || (purchaseUnit ? 1000 : undefined);
-      const purchasePrice = Number(row["Harga Beli per Kemasan"] || row.purchasePrice) || undefined;
+      const conversionFactor = parseLocalizedNumber(row["Isi per Kemasan Beli"] || row.conversionFactor) || (purchaseUnit ? 1000 : 0);
+      const purchasePrice = Math.round(parseLocalizedNumber(row["Harga Beli per Kemasan"] || row.purchasePrice)) || undefined;
 
-      let costPerUnit = Number(row["Harga per Satuan Resep (HPP)"] ?? row["Harga per Satuan"] ?? row.costPerUnit) || 0;
+      let costPerUnit = Math.round(parseLocalizedNumber(row["Harga per Satuan Resep (HPP)"] ?? row["Harga per Satuan"] ?? row.costPerUnit));
       if (!costPerUnit && purchasePrice && conversionFactor && conversionFactor > 0) {
         costPerUnit = Math.round(purchasePrice / conversionFactor);
       }
@@ -1506,16 +1567,16 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
 
       if (name && unit) {
         const payload: Omit<Ingredient, "id"> = {
-          code: code ? String(code).trim() : undefined,
-          name: String(name).trim(),
-          category: String(category).trim(),
-          storageLocation: String(storageLocation).trim(),
+          code: code || undefined,
+          name,
+          category,
+          storageLocation,
           unit,
           currentStock: Math.max(0, currentStock),
           minStock: Math.max(0, minStock),
           costPerUnit: Math.max(0, costPerUnit),
           purchaseUnit: purchaseUnit ? String(purchaseUnit).trim() : undefined,
-          conversionFactor: conversionFactor && conversionFactor > 0 ? conversionFactor : undefined,
+          conversionFactor: conversionFactor > 0 ? conversionFactor : undefined,
           purchasePrice: purchasePrice && purchasePrice > 0 ? purchasePrice : undefined,
           notes: notes ? String(notes).trim() : undefined,
         };
@@ -1536,6 +1597,8 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
           addIngredient(payload);
           imported++;
         }
+      } else {
+        skipped++;
       }
     });
 
@@ -1544,6 +1607,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
     } else {
       toast.warning("Tidak ada data valid yang diimpor. Pastikan file Excel/CSV berisi kolom 'Nama Bahan' dan 'Satuan Resep'.");
     }
+    return { added: imported, updated, skipped };
   };
 
   // Handle Add Movement
@@ -1638,6 +1702,304 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
     setOpnameCategoryFilter("ALL");
     setOpnameDivisionFilter(defaultDivisionFilter);
     setIsOpnameMode(true);
+  };
+
+  const handleDownloadOpnameSheet = async () => {
+    const relevantIngredients = isManagerOrAdmin
+      ? ingredients
+      : ingredients.filter((ing) => isIngredientAllowedForUser(ing, userDivision));
+    if (relevantIngredients.length === 0) {
+      toast.warning("Belum ada bahan baku terdaftar untuk stasiun Anda.");
+      return;
+    }
+    try {
+      await buildTemplateWithDropdown({
+        filename: `Lembar_Hitung_Opname_${getLocalDateString()}`,
+        sheetName: "Hitung Opname",
+        columns: [
+          {
+            header: "ID_SISTEM (JANGAN DIUBAH)",
+            locked: true,
+            format: "text",
+            width: 26,
+            hint: "Jangan ubah ID sistem agar pencocokan bahan akurat.",
+          },
+          { header: "Kode Bahan", format: "text", width: 14 },
+          { header: "Nama Bahan", required: true, format: "text", width: 32 },
+          { header: "Kategori", format: "text", width: 20 },
+          { header: "Lokasi Simpan", format: "text", width: 16 },
+          { header: "Satuan", format: "text", width: 12 },
+          { header: "Stok Sistem", type: "number", format: "number", width: 16 },
+          {
+            header: "Stok Fisik",
+            type: "number",
+            format: "number",
+            required: true,
+            width: 16,
+            hint: "Isi jumlah fisik nyata dalam satuan di kolom Satuan (kosongkan jika tidak dihitung).",
+          },
+          { header: "Catatan", format: "text", width: 30 },
+        ],
+        rows: relevantIngredients.map((ing) => [
+          ing.id,
+          ing.code || "",
+          ing.name,
+          ing.category,
+          ing.storageLocation || "BAR",
+          ing.unit,
+          ing.currentStock,
+          "",
+          "",
+        ]),
+        instructions: [
+          "Isi angka hasil hitung fisik nyata pada kolom 'Stok Fisik' dalam satuan yang tertera di kolom 'Satuan'.",
+          "Baris yang kolom 'Stok Fisik'-nya dikosongkan akan dilewati otomatis saat impor.",
+          "Setelah selesai mengisi, unggah file ini lewat tombol 'Impor Hasil Opname' untuk mengisi tabel opname secara otomatis.",
+        ],
+      });
+      toast.success("Lembar Hitung Opname (.xlsx) berhasil diunduh.");
+    } catch (err: any) {
+      toast.error("Gagal membuat lembar hitung opname: " + (err?.message || err));
+    }
+  };
+
+  const handleImportOpnameSheet = (rows: any[]) => {
+    if (isReadOnly) return { added: 0, updated: 0, skipped: rows.length };
+    const relevantIngredients = isManagerOrAdmin
+      ? ingredients
+      : ingredients.filter((ing) => isIngredientAllowedForUser(ing, userDivision));
+    const { updates, skipped } = parseOpnamePhysicalSheetRows(rows, relevantIngredients);
+    if (updates.length === 0) {
+      toast.warning("Tidak ada baris valid dengan kolom 'Stok Fisik' terisi.");
+      return { added: 0, updated: 0, skipped };
+    }
+
+    const updateMap = new Map(updates.map((u) => [u.ingredientId, u]));
+
+    if (!isOpnameMode) {
+      const newId =
+        typeof crypto !== "undefined" && crypto.randomUUID
+          ? crypto.randomUUID()
+          : "op_" + Date.now().toString(36) + Math.random().toString(36).substr(2, 6);
+      setOpnameId(newId);
+      setOpnameDate(getLocalDateString());
+      const nextItems = relevantIngredients.map((ing) => {
+        const match = updateMap.get(ing.id);
+        const physicalStock = match ? match.physicalStock : ing.currentStock;
+        return {
+          ingredientId: ing.id,
+          physicalStock,
+          difference: physicalStock - ing.currentStock,
+          notes: match?.notes || "",
+        };
+      });
+      setOpnameItems(nextItems);
+      const nextDrafts: Record<string, string> = {};
+      nextItems.forEach((item) => {
+        const ing = ingredients.find((i) => i.id === item.ingredientId);
+        if (!ing) return;
+        const conv = getIngredientUnitConversion(ing);
+        const isPurchase = opnameInputMode === "PURCHASE" && conv.hasConversion;
+        nextDrafts[item.ingredientId] = isPurchase
+          ? (Math.round((item.physicalStock / conv.conversionFactor) * 1000) / 1000).toString()
+          : item.physicalStock.toString();
+      });
+      setOpnameInputDrafts(nextDrafts);
+      setRowUnitModes({});
+      setOpnameSearch("");
+      setOpnameCategoryFilter("ALL");
+      setOpnameDivisionFilter(defaultDivisionFilter);
+      setIsOpnameMode(true);
+    } else {
+      setOpnameItems((prev) =>
+        prev.map((item) => {
+          const match = updateMap.get(item.ingredientId);
+          if (!match) return item;
+          const ing = ingredients.find((i) => i.id === item.ingredientId);
+          const sys = ing ? ing.currentStock : 0;
+          return {
+            ...item,
+            physicalStock: match.physicalStock,
+            difference: match.physicalStock - sys,
+            notes: match.notes || item.notes,
+          };
+        })
+      );
+      setOpnameInputDrafts((prev) => {
+        const next = { ...prev };
+        updates.forEach((u) => {
+          const ing = ingredients.find((i) => i.id === u.ingredientId);
+          if (!ing) return;
+          const conv = getIngredientUnitConversion(ing);
+          const rowMode = rowUnitModes[u.ingredientId] || opnameInputMode;
+          const isPurchase = rowMode === "PURCHASE" && conv.hasConversion;
+          next[u.ingredientId] = isPurchase
+            ? (Math.round((u.physicalStock / conv.conversionFactor) * 1000) / 1000).toString()
+            : u.physicalStock.toString();
+        });
+        return next;
+      });
+    }
+
+    toast.success(`${updates.length} hasil hitung fisik berhasil dimasukkan ke form Opname.`);
+    return { added: updates.length, updated: 0, skipped };
+  };
+
+  const handleExportOpnameSession = async (op: StockOpname) => {
+    const relatedItems = stockOpnameItems.filter((i) => i.opnameId === op.id);
+    if (relatedItems.length === 0) {
+      toast.warning("Sesi opname ini belum memiliki rincian item.");
+      return;
+    }
+    try {
+      let totalSysVal = 0;
+      let totalPhysVal = 0;
+      let totalDiffVal = 0;
+      const detailRows = relatedItems.map((item) => {
+        const ing = ingredients.find((i) => i.id === item.ingredientId);
+        const unitCost = Math.round(Number(item.unitCost) || Number(ing?.costPerUnit) || 0);
+        const sys = Number(item.systemStock) || 0;
+        const phys = Number(item.physicalStock) || 0;
+        const diff = Number(item.difference) || 0;
+        const diffCost = Math.round(diff * unitCost);
+        totalSysVal += Math.round(sys * unitCost);
+        totalPhysVal += Math.round(phys * unitCost);
+        totalDiffVal += diffCost;
+        return [
+          ing?.code || "-",
+          ing?.name || "Bahan Terhapus",
+          ing?.category || "-",
+          ing?.storageLocation || "-",
+          ing?.unit || "unit",
+          sys,
+          phys,
+          diff,
+          unitCost,
+          diffCost,
+          item.notes || "-",
+        ];
+      });
+
+      const dateStr = String(op.date || "").slice(0, 10) || getLocalDateString();
+      await buildStyledWorkbook({
+        filename: `Hasil_Stok_Opname_${dateStr}_${op.status}`,
+        sheets: [
+          {
+            name: "Ringkasan Opname",
+            title: `Laporan Stok Opname (${op.status})`,
+            subtitle: `Tanggal: ${dateStr} • Auditor: ${op.createdBy || "-"}`,
+            headers: ["Indikator", "Nilai"],
+            rows: [
+              ["Tanggal Opname", dateStr],
+              ["Auditor", op.createdBy || "-"],
+              ["Status", op.status],
+              ["Total Item Dihitung", relatedItems.length],
+              ["Item Selisih", relatedItems.filter((i) => i.difference !== 0).length],
+              ["Nilai Stok Sistem (Rp)", totalSysVal],
+              ["Nilai Stok Fisik (Rp)", totalPhysVal],
+              ["Selisih Nilai Stok (Rp)", totalDiffVal],
+              ["Catatan", op.notes || "-"],
+            ],
+            columnFormats: ["text", "text"],
+          },
+          {
+            name: "Rincian Selisih",
+            title: "Rincian Hitung Fisik & Selisih Bahan Baku",
+            subtitle: `Sesi ${dateStr} • ${relatedItems.length} item`,
+            headers: [
+              "Kode",
+              "Nama Bahan",
+              "Kategori",
+              "Lokasi",
+              "Satuan",
+              "Stok Sistem",
+              "Stok Fisik",
+              "Selisih",
+              "Modal/Unit (Rp)",
+              "Selisih Nilai (Rp)",
+              "Catatan",
+            ],
+            rows: detailRows,
+            columnFormats: [
+              "text",
+              "text",
+              "text",
+              "text",
+              "text",
+              "number",
+              "number",
+              "number",
+              "currency",
+              "currency",
+              "text",
+            ],
+            totalRow: [
+              "",
+              "TOTAL SELISIH NILAI",
+              "",
+              "",
+              "",
+              "",
+              "",
+              "",
+              "",
+              totalDiffVal,
+              "",
+            ],
+          },
+        ],
+      });
+      toast.success("Laporan Stok Opname (.xlsx) berhasil diunduh.");
+    } catch (err: any) {
+      toast.error("Gagal mengekspor stok opname: " + (err?.message || err));
+    }
+  };
+
+  const handleImportRecipes = (data: any[]) => {
+    if (isReadOnly || userRole === "LEADER") {
+      return { added: 0, updated: 0, skipped: data.length };
+    }
+    const { toCreate, toUpdate, skipped } = buildRecipeImportPlan(
+      data,
+      ingredients,
+      recipes
+    );
+    let added = 0;
+    let updated = 0;
+
+    toCreate.forEach((rec) => {
+      const merged = mergeDuplicateRecipeIngredients(rec.ingredients);
+      const check = validateRecipeSubmission({
+        menuName: rec.menuName,
+        ingredients: merged,
+        existingRecipes: recipes,
+      });
+      if ("ok" in check) {
+        addRecipe({ menuName: rec.menuName, ingredients: merged });
+        added++;
+      }
+    });
+
+    toUpdate.forEach((rec) => {
+      const merged = mergeDuplicateRecipeIngredients(rec.ingredients);
+      const check = validateRecipeSubmission({
+        menuName: rec.menuName,
+        ingredients: merged,
+        existingRecipes: recipes,
+        editingRecipeId: rec.id,
+      });
+      if ("ok" in check) {
+        updateRecipe({ ...rec, ingredients: merged });
+        updated++;
+      }
+    });
+
+    if (added > 0 || updated > 0) {
+      toast.success(`Berhasil menambah ${added} resep baru dan memperbarui ${updated} resep.`);
+    } else {
+      toast.warning("Tidak ada resep valid yang diimpor. Pastikan Nama Menu & Nama Bahan sesuai.");
+    }
+    return { added, updated, skipped };
   };
 
   const handleResumeDraft = (draft: StockOpname) => {
@@ -2032,13 +2394,16 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
 
         {/* Action Buttons */}
         <div className="flex flex-wrap items-center gap-2 w-full 2xl:w-auto 2xl:justify-end shrink-0">
-          {activeTab === "ingredients" && !isReadOnly && (
+          {activeTab === "ingredients" && (
             <>
-              {currentUser?.role !== "LEADER" && (
               <CsvImportExport
                 onImport={handleImportIngredients}
+                canImport={!isReadOnly && userRole !== "LEADER"}
+                requiredHeaders={["Nama Bahan", "Satuan Resep (Terkecil)"]}
+                exportFilename={`Master_Bahan_Baku_${getLocalDateString()}`}
+                exportTitle="Master Bahan Baku & Olahan"
                 templateFilename="Template_Master_Bahan_Baku.xlsx"
-                buttonLabel="Impor/Ekspor"
+                buttonLabel={!isReadOnly && userRole !== "LEADER" ? "Impor / Ekspor" : "Ekspor Data"}
                 templateHeaders={[
                   "Kode Bahan",
                   "Nama Bahan",
@@ -2097,6 +2462,14 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                   "Harga Beli per Kemasan": "number",
                   "Harga per Satuan Resep (HPP)": "number",
                 }}
+                templateFormats={{
+                  "Kode Bahan": "text",
+                  "Stok Fisik Saat Ini": "number",
+                  "Batas Minimum (Alert)": "number",
+                  "Isi per Kemasan Beli": "number",
+                  "Harga Beli per Kemasan": "currency",
+                  "Harga per Satuan Resep (HPP)": "currency",
+                }}
                 templateHints={{
                   "Kode Bahan": "Kode SKU atau barcode unik (opsional, contoh: BB-001)",
                   "Nama Bahan": "Nama lengkap bahan baku",
@@ -2127,27 +2500,28 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                   "Catatan Tambahan": i.notes || "",
                 }))}
               />
-              )}
-              {canManageCategories && (
-                <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.96 }}
-                  type="button"
-                  onClick={() => setIsCategoryModalOpen(true)}
-                  className="flex items-center gap-1.5 px-3 py-2.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-2xl text-xs font-bold transition-all shadow-2xs cursor-pointer whitespace-nowrap shrink-0"
-                  title="Tambah, ubah nama, atau hapus kategori bahan baku & olahan"
-                >
-                  <Sliders className="w-3.5 h-3.5 text-brand-600 shrink-0" />
-                  <span>Atur Kategori</span>
-                </motion.button>
-              )}
-              <motion.button
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.96 }}
-                type="button"
-                onClick={() => handleOpenAddIngredient("OLAHAN")}
-                className="flex items-center gap-1.5 px-3.5 py-2.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200/80 rounded-2xl text-xs font-bold transition-all shadow-2xs cursor-pointer whitespace-nowrap shrink-0"
-                title="Tambah bahan olahan/racikan internal dengan kalkulator modal batch"
+              {!isReadOnly && (
+                <>
+                  {canManageCategories && (
+                    <motion.button
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.96 }}
+                      type="button"
+                      onClick={() => setIsCategoryModalOpen(true)}
+                      className="flex items-center gap-1.5 px-3 py-2.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-2xl text-xs font-bold transition-all shadow-2xs cursor-pointer whitespace-nowrap shrink-0"
+                      title="Tambah, ubah nama, atau hapus kategori bahan baku & olahan"
+                    >
+                      <Sliders className="w-3.5 h-3.5 text-brand-600 shrink-0" />
+                      <span>Atur Kategori</span>
+                    </motion.button>
+                  )}
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.96 }}
+                    type="button"
+                    onClick={() => handleOpenAddIngredient("OLAHAN")}
+                    className="flex items-center gap-1.5 px-3.5 py-2.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200/80 rounded-2xl text-xs font-bold transition-all shadow-2xs cursor-pointer whitespace-nowrap shrink-0"
+                    title="Tambah bahan olahan/racikan internal dengan kalkulator modal batch"
               >
                 <Flame className="w-3.5 h-3.5 text-amber-600 shrink-0" />
                 <span>+ Bahan Olahan</span>
@@ -2176,6 +2550,8 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                 <Plus className="w-4 h-4 shrink-0" />
                 <span>Tambah Bahan Baku</span>
               </motion.button>
+              )}
+                </>
               )}
             </>
           )}
@@ -2270,32 +2646,138 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
           )}
 
           {activeTab === "opnames" && !isReadOnly && !isOpnameMode && (
-            <motion.button
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.96 }}
-              type="button"
-              onClick={startOpname}
-              className="flex items-center gap-1.5 px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white rounded-2xl text-xs font-bold transition-all shadow-xs cursor-pointer"
-            >
-              <ClipboardList className="w-4 h-4" />
-              <span>Mulai Sesi Opname Fisik</span>
-            </motion.button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={handleDownloadOpnameSheet}
+                className="flex items-center gap-1.5 px-3.5 py-2.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-2xl text-xs font-bold transition-all shadow-2xs cursor-pointer"
+                title="Unduh lembar hitung stok fisik (.xlsx) untuk dicetak atau diisi di tablet/laptop"
+              >
+                <Download className="w-3.5 h-3.5 text-brand-600" />
+                <span>Lembar Hitung (.xlsx)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsOpnameImportModalOpen(true)}
+                className="flex items-center gap-1.5 px-3.5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-xs font-bold transition-all shadow-xs cursor-pointer"
+                title="Unggah lembar hitung opname yang sudah diisi stok fisiknya"
+              >
+                <Upload className="w-3.5 h-3.5" />
+                <span>Impor Hasil Opname</span>
+              </button>
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.96 }}
+                type="button"
+                onClick={startOpname}
+                className="flex items-center gap-1.5 px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white rounded-2xl text-xs font-bold transition-all shadow-xs cursor-pointer"
+              >
+                <ClipboardList className="w-4 h-4" />
+                <span>Mulai Sesi Opname Fisik</span>
+              </motion.button>
+            </div>
           )}
 
-          {activeTab === "recipes" && !isReadOnly && currentUser?.role !== "LEADER" && (
-            <motion.button
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.96 }}
-              type="button"
-              onClick={() => {
-                setEditingRecipe(null);
-                setIsAddRecipeOpen(true);
-              }}
-              className="flex items-center gap-1.5 px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white rounded-2xl text-xs font-bold transition-all shadow-xs cursor-pointer"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Tambah Resep Baru</span>
-            </motion.button>
+          {activeTab === "recipes" && (
+            <div className="flex flex-wrap items-center gap-2">
+              <CsvImportExport
+                onImport={handleImportRecipes}
+                canImport={!isReadOnly && currentUser?.role !== "LEADER"}
+                allowBulkEdit={false}
+                requiredHeaders={["Nama Menu / Varian", "Nama Bahan Baku", "Takaran"]}
+                exportFilename={`Daftar_Resep_Menu_${getLocalDateString()}`}
+                exportTitle="Daftar Resep & Takaran Menu (Bill of Materials)"
+                templateFilename="Template_Resep_Menu.xlsx"
+                buttonLabel={!isReadOnly && currentUser?.role !== "LEADER" ? "Impor / Ekspor" : "Ekspor Resep"}
+                templateHeaders={[
+                  "Nama Menu / Varian",
+                  "Nama Bahan Baku",
+                  "Takaran",
+                  "Satuan (Info)",
+                ]}
+                templateExampleRow={[
+                  products[0]?.name || "Kopi Susu Gula Aren",
+                  ingredients[0]?.name || "Kopi Arabika Gayo House Blend",
+                  "18",
+                  ingredients[0]?.unit || "gr",
+                ]}
+                templateDropdowns={{
+                  "Nama Menu / Varian": Array.from(
+                    new Set([
+                      ...recipes.map((r) => r.menuName),
+                      ...products.flatMap((p) =>
+                        (p.variants || []).length > 1
+                          ? p.variants.map((v) => `${p.name} - ${v.name}`)
+                          : [p.name]
+                      ),
+                    ])
+                  ).filter(Boolean),
+                  "Nama Bahan Baku": ingredients.map((i) => i.name).filter(Boolean),
+                }}
+                templateColumnTypes={{
+                  Takaran: "number",
+                }}
+                templateFormats={{
+                  Takaran: "number",
+                  "Estimasi Modal (Rp)": "currency",
+                }}
+                templateHints={{
+                  "Nama Menu / Varian": "Satu menu bisa terdiri dari beberapa baris bahan baku.",
+                  "Nama Bahan Baku": "Pilih bahan baku persis dari dropdown.",
+                  Takaran: "Jumlah takaran dalam satuan resep bahan baku.",
+                }}
+                templateInstructions={[
+                  "Untuk 1 menu dengan beberapa bahan, tulis beberapa baris dengan 'Nama Menu / Varian' yang sama.",
+                  "Jika nama menu sudah punya resep, sistem akan memperbarui komposisi resep tersebut.",
+                ]}
+                currentData={recipes.flatMap((rec) =>
+                  getRecipeIngredients(rec).map((ri) => {
+                    const ing = ingredients.find((i) => i.id === ri.ingredientId);
+                    return {
+                      "Nama Menu / Varian": rec.menuName,
+                      "Nama Bahan Baku": ing?.name || ri.ingredientId,
+                      Takaran: ri.quantity,
+                      "Satuan (Info)": ing?.unit || "unit",
+                    };
+                  })
+                )}
+                exportHeaders={[
+                  "Nama Menu / Varian",
+                  "Nama Bahan Baku",
+                  "Takaran",
+                  "Satuan (Info)",
+                  "Estimasi Modal (Rp)",
+                ]}
+                exportRows={recipes.flatMap((rec) =>
+                  getRecipeIngredients(rec).map((ri) => {
+                    const ing = ingredients.find((i) => i.id === ri.ingredientId);
+                    const est = Math.round((Number(ri.quantity) || 0) * (Number(ing?.costPerUnit) || 0));
+                    return {
+                      "Nama Menu / Varian": rec.menuName,
+                      "Nama Bahan Baku": ing?.name || ri.ingredientId,
+                      Takaran: ri.quantity,
+                      "Satuan (Info)": ing?.unit || "unit",
+                      "Estimasi Modal (Rp)": est,
+                    };
+                  })
+                )}
+              />
+              {!isReadOnly && currentUser?.role !== "LEADER" && (
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.96 }}
+                  type="button"
+                  onClick={() => {
+                    setEditingRecipe(null);
+                    setIsAddRecipeOpen(true);
+                  }}
+                  className="flex items-center gap-1.5 px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white rounded-2xl text-xs font-bold transition-all shadow-xs cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Tambah Resep Baru</span>
+                </motion.button>
+              )}
+            </div>
           )}
 
           {activeTab === "waste" && (
@@ -3172,6 +3654,15 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                 <div className="flex flex-wrap gap-2 w-full sm:w-auto">
                   <button
                     type="button"
+                    onClick={() => setIsOpnameImportModalOpen(true)}
+                    className="flex-1 sm:flex-initial px-3.5 py-2 bg-white border border-brand-200 rounded-xl text-brand-700 text-xs font-bold hover:bg-brand-50 cursor-pointer transition-all inline-flex items-center justify-center gap-1.5"
+                    title="Isi angka stok fisik dari file Lembar Hitung Excel"
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>Impor Angka Fisik</span>
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => setIsCancelOpnameConfirmOpen(true)}
                     className="flex-1 sm:flex-initial px-4 py-2 bg-white border border-slate-200 rounded-xl text-slate-700 text-xs font-bold hover:bg-slate-50 cursor-pointer transition-all active:scale-[0.98]"
                   >
@@ -3913,6 +4404,14 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                                       </>
                                     )}
                                     <button
+                                      type="button"
+                                      onClick={() => handleExportOpnameSession(op)}
+                                      className="p-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-xl transition-all cursor-pointer"
+                                      title="Ekspor Hasil Opname (.xlsx)"
+                                    >
+                                      <Download className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
                                       onClick={() => setSelectedOpnameForView(op)}
                                       className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1.5"
                                     >
@@ -4004,6 +4503,14 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                                   </button>
                                 </>
                               )}
+                              <button
+                                type="button"
+                                onClick={() => handleExportOpnameSession(op)}
+                                className="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-xl text-xs font-bold flex items-center gap-1"
+                              >
+                                <Download className="w-3.5 h-3.5" />
+                                <span>Excel</span>
+                              </button>
                               <button
                                 onClick={() => setSelectedOpnameForView(op)}
                                 className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold flex items-center gap-1"
@@ -4360,14 +4867,14 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                 ))}
               </div>
 
-              {/* Export CSV Button */}
+              {/* Export Excel Button */}
               <button
                 type="button"
                 onClick={handleExportWasteCsv}
-                className="flex items-center justify-center gap-1.5 px-3.5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl text-xs font-bold transition-all cursor-pointer shrink-0"
+                className="flex items-center justify-center gap-1.5 px-3.5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-xs font-bold transition-all cursor-pointer shrink-0 shadow-xs"
               >
-                <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
-                <span>Ekspor CSV ({filteredWasteMovements.length})</span>
+                <FileSpreadsheet className="w-4 h-4" />
+                <span>Ekspor Excel ({filteredWasteMovements.length})</span>
               </button>
             </div>
 
@@ -6316,6 +6823,28 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
           saveOpname("FINAL");
         }}
         onCancel={() => setIsFinalizeOpnameConfirmOpen(false)}
+      />
+
+      <GenericImportModal
+        isOpen={isOpnameImportModalOpen}
+        onClose={() => setIsOpnameImportModalOpen(false)}
+        title="Impor Hasil Hitung Stok Opname"
+        expectedHeaders={[
+          "ID_SISTEM (JANGAN DIUBAH)",
+          "Kode Bahan",
+          "Nama Bahan",
+          "Satuan",
+          "Stok Sistem",
+          "Stok Fisik",
+          "Catatan",
+        ]}
+        requiredHeaders={["Nama Bahan", "Stok Fisik"]}
+        onDownloadTemplate={handleDownloadOpnameSheet}
+        instructions={[
+          "Gunakan file dari tombol 'Lembar Hitung (.xlsx)' agar ID dan nama bahan cocok 100%.",
+          "Baris yang kolom 'Stok Fisik'-nya kosong akan dilewati (tidak mengubah angka sistem).",
+        ]}
+        onImport={(rows) => handleImportOpnameSheet(rows)}
       />
     </div>
   );

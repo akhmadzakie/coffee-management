@@ -129,6 +129,10 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
     splitMode: "ITEMS" | "EVENLY";
     splitItems: any[];
     splitAmount: number;
+    splitSubtotal?: number;
+    splitTaxAmount?: number;
+    splitTaxPercent?: number;
+    splitTaxMode?: "EXCLUSIVE" | "INCLUSIVE";
   } | null>(null);
   const [isOpenBillsModalOpen, setIsOpenBillsModalOpen] = useState(false);
   const [isPinModalOpen, setIsPinModalOpen] = useState(false);
@@ -734,6 +738,10 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
         splitMode: billOrder.splitMode,
         splitItems: billOrder.splitItems,
         splitAmount: billOrder.totalAmount,
+        splitSubtotal: billOrder.subtotal ?? billOrder.totalAmount,
+        splitTaxAmount: billOrder.taxAmount ?? 0,
+        splitTaxPercent: billOrder.taxPercent ?? 0,
+        splitTaxMode: billOrder.taxMode ?? "EXCLUSIVE",
       });
       setCurrentEditingOrderId(null);
       setTableNumber(billOrder.tableNumber || "");
@@ -1488,11 +1496,21 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
         {isPaymentModalOpen && (
           <PosPaymentModal
             totalAmount={splitBillConfig?.isSplit ? splitBillConfig.splitAmount : totalAmount}
-            subtotal={splitBillConfig?.isSplit ? splitBillConfig.splitAmount : subtotal}
+            subtotal={
+              splitBillConfig?.isSplit
+                ? (splitBillConfig.splitSubtotal ?? splitBillConfig.splitAmount)
+                : subtotal
+            }
             discountAmount={splitBillConfig?.isSplit ? 0 : discountAmount}
-            taxAmount={splitBillConfig?.isSplit ? 0 : taxAmount}
-            taxPercent={taxEnabled ? taxRate : 0}
-            taxMode={taxMode}
+            taxAmount={splitBillConfig?.isSplit ? (splitBillConfig.splitTaxAmount ?? 0) : taxAmount}
+            taxPercent={
+              splitBillConfig?.isSplit
+                ? (splitBillConfig.splitTaxPercent ?? 0)
+                : (taxEnabled ? taxRate : 0)
+            }
+            taxMode={
+              splitBillConfig?.isSplit ? (splitBillConfig.splitTaxMode ?? taxMode) : taxMode
+            }
             tableNumber={tableNumber}
             customerName={customerName}
             orderType={orderType}
@@ -2002,29 +2020,6 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
               setIsExitPinModalOpen(false);
               if (isManagerOrAdmin && onNavigateBack) onNavigateBack();
               else logout();
-            }}
-          />
-        )}
-      </AnimatePresence>
-
-      {/* ── Modal Otorisasi PIN Manager untuk Diskon Khusus Manual ─── */}
-      <AnimatePresence>
-        {isPinModalOpen && (
-          <PosManagerPinModal
-            title={`Otorisasi Diskon Khusus (${pendingDiscountType === "PERCENT" ? `${pendingDiscountValue}%` : formatCurrency(pendingDiscountValue)})`}
-            description={`Kasir mengajukan diskon manual dengan alasan: "${pendingDiscountReason || 'Diskon Khusus'}". Masukkan PIN Manager untuk menyetujui.`}
-            requireReason={false}
-            onClose={() => setIsPinModalOpen(false)}
-            onSuccess={(manager) => {
-              setIsPinModalOpen(false);
-              setDiscountType(pendingDiscountType);
-              setDiscountValue(pendingDiscountValue);
-              setDiscountReason(pendingDiscountReason || `Diskon Khusus (Disetujui ${manager.name})`);
-              setAppliedPromotionId(null);
-              setAppliedPromotionName(null);
-              setAppliedPromoMaxDiscount(undefined);
-              setIsDiscountModalOpen(false);
-              toast.success(`Diskon khusus berhasil disetujui oleh Manager (${manager.name}).`);
             }}
           />
         )}

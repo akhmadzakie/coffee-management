@@ -33,6 +33,12 @@ import {
 import { CustomSelect } from "./common/CustomSelect";
 import { CustomDatePicker } from "./common/CustomDatePicker";
 import { ConfirmModal, useConfirm } from "./common/ConfirmModal";
+import { CsvImportExport } from "./common/CsvImportExport";
+import {
+  normalizeTextCode,
+  parseFlexibleDateYmd,
+  parseLocalizedNumber,
+} from "../utils/genericImport";
 
 export const PromotionsManagement: React.FC = () => {
   const {
@@ -209,6 +215,93 @@ export const PromotionsManagement: React.FC = () => {
     setIsModalOpen(false);
   };
 
+  const handleImportPromotions = (data: any[]) => {
+    if (!canManage) {
+      toast.warning("Anda tidak memiliki izin mengelola promo.");
+      return { added: 0, updated: 0, skipped: data.length };
+    }
+    let added = 0;
+    let updated = 0;
+    let skipped = 0;
+    let runningPromos = [...(promotions || [])];
+
+    for (const row of data) {
+      const idSistem = normalizeTextCode(row["ID_SISTEM (JANGAN DIUBAH)"]);
+      const name = String(row["Nama Promo"] ?? row.name ?? "").trim();
+      const code = normalizeTextCode(row["Kode Promo"] ?? row.code).toUpperCase();
+      const rawType = String(row["Tipe"] ?? row.type ?? "PERCENT").trim().toUpperCase();
+      const type: PromotionType = rawType === "NOMINAL" ? "NOMINAL" : "PERCENT";
+      const value = Math.max(0, Math.round(parseLocalizedNumber(row["Nilai"] ?? row.value)));
+      const minSpend = Math.max(0, Math.round(parseLocalizedNumber(row["Min Belanja"] ?? row.minSpend)));
+      const maxDiscount = Math.max(0, Math.round(parseLocalizedNumber(row["Maks Diskon"] ?? row.maxDiscount)));
+      const startDate = parseFlexibleDateYmd(row["Tanggal Mulai"] ?? row.startDate) || undefined;
+      const endDate = parseFlexibleDateYmd(row["Tanggal Selesai"] ?? row.endDate) || undefined;
+      const rawStatus = String(row["Status"] ?? row.isActive ?? "AKTIF").trim().toUpperCase();
+      const isActive = !["NONAKTIF", "FALSE", "0", "INACTIVE", "TIDAK"].includes(rawStatus);
+      const description = String(row["Keterangan"] ?? row.description ?? "").trim() || undefined;
+
+      const existing = idSistem ? runningPromos.find((p) => p.id === idSistem) : undefined;
+      const validation = validatePromotionInput(
+        { name, code, type, value, minSpend, maxDiscount, startDate, endDate },
+        runningPromos,
+        existing?.id || null
+      );
+      if ("error" in validation) {
+        skipped++;
+        continue;
+      }
+
+      const { normalized } = validation;
+      if (existing) {
+        const updatedPromo: Promotion = {
+          ...existing,
+          name: normalized.name,
+          code: normalized.code,
+          type,
+          value: normalized.value,
+          minSpend: normalized.minSpend,
+          maxDiscount: normalized.maxDiscount,
+          isActive,
+          description: description ?? existing.description,
+          startDate: normalized.startDate,
+          endDate: normalized.endDate,
+        };
+        updatePromotion(existing.id, updatedPromo);
+        runningPromos = runningPromos.map((p) => (p.id === existing.id ? updatedPromo : p));
+        updated++;
+      } else {
+        const newPromo: Promotion = {
+          id: `promo_${Date.now()}_${added}`,
+          name: normalized.name,
+          code: normalized.code,
+          type,
+          value: normalized.value,
+          minSpend: normalized.minSpend,
+          maxDiscount: normalized.maxDiscount,
+          isActive,
+          description,
+          startDate: normalized.startDate,
+          endDate: normalized.endDate,
+          createdAt: new Date().toISOString(),
+          createdBy: currentUser?.name || currentUser?.username,
+        };
+        addPromotion(newPromo);
+        runningPromos.push(newPromo);
+        added++;
+      }
+    }
+
+    if (added > 0 || updated > 0) {
+      toast.success(
+        `Berhasil menambahkan ${added} promo baru & memperbarui ${updated} promo.` +
+          (skipped > 0 ? ` (${skipped} baris dilewati)` : "")
+      );
+    } else {
+      toast.warning("Tidak ada promo valid yang diimpor. Periksa Nama, Kode unik, & Nilai diskon.");
+    }
+    return { added, updated, skipped };
+  };
+
   const confirmDeletePromo = (promo: Promotion) => {
     if (!canManage) return;
     confirmModal.open({
@@ -255,20 +348,93 @@ export const PromotionsManagement: React.FC = () => {
           </div>
         </div>
 
-        {canManage ? (
-          <button
-            onClick={handleOpenAddModal}
-            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-brand-600 hover:bg-brand-700 active:bg-brand-800 text-white font-semibold rounded-xl shadow-sm hover:shadow transition-all text-sm cursor-pointer"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Tambah Promo Baru</span>
-          </button>
-        ) : isOwner ? (
-          <div className="inline-flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-xs font-bold">
-            <ShieldAlert className="w-4 h-4 text-amber-600 shrink-0" />
-            <span>Mode Pemantauan Owner (Read-Only)</span>
-          </div>
-        ) : null}
+        <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+          <CsvImportExport
+            onImport={handleImportPromotions}
+            canImport={canManage}
+            requiredHeaders={["Nama Promo", "Tipe", "Nilai"]}
+            exportFilename={`Daftar_Promo_Diskon_${todayStr}`}
+            exportTitle="Daftar Promo & Whitelist Diskon Menu"
+            templateFilename="Template_Promo_Diskon.xlsx"
+            buttonLabel={canManage ? "Impor / Ekspor" : "Ekspor Promo"}
+            templateHeaders={[
+              "Nama Promo",
+              "Kode Promo",
+              "Tipe",
+              "Nilai",
+              "Min Belanja",
+              "Maks Diskon",
+              "Tanggal Mulai",
+              "Tanggal Selesai",
+              "Status",
+              "Keterangan",
+            ]}
+            templateExampleRow={[
+              "Diskon Member Pagi",
+              "PAGI10",
+              "PERCENT",
+              "10",
+              "50000",
+              "25000",
+              todayStr,
+              "",
+              "AKTIF",
+              "Diskon 10% untuk minimal belanja Rp 50.000",
+            ]}
+            currentData={(promotions || []).map((p) => ({
+              id: p.id,
+              "Nama Promo": p.name,
+              "Kode Promo": p.code || "",
+              Tipe: p.type,
+              Nilai: p.value,
+              "Min Belanja": p.minSpend || 0,
+              "Maks Diskon": p.maxDiscount || 0,
+              "Tanggal Mulai": p.startDate ? p.startDate.slice(0, 10) : "",
+              "Tanggal Selesai": p.endDate ? p.endDate.slice(0, 10) : "",
+              Status: p.isActive ? "AKTIF" : "NONAKTIF",
+              Keterangan: p.description || "",
+            }))}
+            templateDropdowns={{
+              Tipe: ["PERCENT", "NOMINAL"],
+              Status: ["AKTIF", "NONAKTIF"],
+            }}
+            templateColumnTypes={{
+              Nilai: "integer",
+              "Min Belanja": "integer",
+              "Maks Diskon": "integer",
+              "Tanggal Mulai": "date",
+              "Tanggal Selesai": "date",
+            }}
+            templateFormats={{
+              "Kode Promo": "text",
+              Nilai: "integer",
+              "Min Belanja": "currency",
+              "Maks Diskon": "currency",
+              "Tanggal Mulai": "date",
+              "Tanggal Selesai": "date",
+            }}
+            templateHints={{
+              Tipe: "PERCENT (persen 1-100) atau NOMINAL (Rupiah)",
+              "Kode Promo": "Huruf/angka tanpa spasi (opsional, harus unik)",
+              "Maks Diskon": "Batas maksimal potongan Rupiah untuk tipe PERCENT (0 = tanpa batas)",
+            }}
+          />
+
+          {canManage ? (
+            <button
+              onClick={handleOpenAddModal}
+              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-brand-600 hover:bg-brand-700 active:bg-brand-800 text-white font-semibold rounded-xl shadow-sm hover:shadow transition-all text-sm cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Tambah Promo Baru</span>
+            </button>
+          ) : isOwner ? (
+            <div className="inline-flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-xs font-bold">
+              <ShieldAlert className="w-4 h-4 text-amber-600 shrink-0" />
+              <span>Mode Pemantauan Owner (Read-Only)</span>
+            </div>
+          ) : null}
+        </div>
       </div>
 
       {/* ── Owner Read-Only Guard Banner ── */}

@@ -7,8 +7,9 @@ import { toast } from "../context/ToastContext";
 import { formatCurrency } from "../utils/format";
 import { computeCashAccountBalances } from "../utils/financeMetrics";
 import { computeShiftExpectedCash } from "../utils/syncSanitizers";
-import { DEFAULT_STORE_TIMEZONE } from "../utils/dateUtils";
+import { DEFAULT_STORE_TIMEZONE, getLocalDateString } from "../utils/dateUtils";
 import { getWitaTimeMinutes } from "../utils/attendanceRecap";
+import { buildStyledWorkbook } from "../utils/excelTemplate";
 import {
   Play,
   Square,
@@ -17,6 +18,7 @@ import {
   Clock,
   TrendingUp,
   TrendingDown,
+  Download,
 } from "lucide-react";
 import { motion } from "motion/react";
 import {
@@ -178,6 +180,91 @@ export const ShiftManagement = () => {
   const formatNumberInput = (value: string) => {
     const num = value.replace(/\D/g, "");
     return num ? parseInt(num).toLocaleString("id-ID") : "";
+  };
+
+  const handleExportShifts = async () => {
+    if (pastShifts.length === 0) {
+      toast.warning("Belum ada riwayat shift kasir untuk diekspor.");
+      return;
+    }
+    try {
+      let totalStart = 0;
+      let totalExp = 0;
+      let totalAct = 0;
+      let totalDiff = 0;
+
+      const rows = pastShifts.map((shift) => {
+        const startCash = Math.round(Number(shift.startingCash) || 0);
+        const expCash = Math.round(Number(shift.expectedEndingCash) || 0);
+        const actCash = Math.round(Number(shift.actualEndingCash) || 0);
+        const diff = Math.round(Number(shift.difference) || 0);
+        totalStart += startCash;
+        totalExp += expCash;
+        totalAct += actCash;
+        totalDiff += diff;
+        return [
+          new Date(shift.startTime).toLocaleString("id-ID", { timeZone: DEFAULT_STORE_TIMEZONE }),
+          shift.endTime
+            ? new Date(shift.endTime).toLocaleString("id-ID", { timeZone: DEFAULT_STORE_TIMEZONE })
+            : "-",
+          shift.picEmployeeName || "-",
+          shift.teamMembers && shift.teamMembers.length > 0 ? shift.teamMembers.join(", ") : "-",
+          startCash,
+          expCash,
+          actCash,
+          diff,
+          diff === 0 ? "SEIMBANG" : diff > 0 ? "SURPLUS" : "KURANG",
+        ];
+      });
+
+      await buildStyledWorkbook({
+        filename: `Laporan_Shift_Kasir_${getLocalDateString()}`,
+        sheets: [
+          {
+            name: "Ringkasan Shift",
+            title: "Riwayat & Rekonsiliasi Shift Kasir",
+            subtitle: `Total ${pastShifts.length} sesi shift • Diekspor ${getLocalDateString()}`,
+            headers: [
+              "Waktu Buka (WITA)",
+              "Waktu Tutup (WITA)",
+              "PIC Shift",
+              "Anggota Tim",
+              "Modal Awal (Rp)",
+              "Kas Diharapkan (Rp)",
+              "Kas Aktual (Rp)",
+              "Selisih (Rp)",
+              "Status Laci",
+            ],
+            rows,
+            columnFormats: [
+              "text",
+              "text",
+              "text",
+              "text",
+              "currency",
+              "currency",
+              "currency",
+              "currency",
+              "text",
+            ],
+            totalRow: [
+              "TOTAL",
+              "",
+              `${pastShifts.length} Shift`,
+              "",
+              totalStart,
+              totalExp,
+              totalAct,
+              totalDiff,
+              "",
+            ],
+          },
+        ],
+      });
+      toast.success(`Berhasil mengekspor ${pastShifts.length} riwayat shift ke Excel (.xlsx).`);
+    } catch (err: any) {
+      toast.error("Gagal mengekspor riwayat shift: " + (err?.message || err));
+    }
   };
 
   // Prepare data for shift history chart (WITA timezone)
@@ -591,10 +678,18 @@ export const ShiftManagement = () => {
 
           {/* Table Section (Desktop / Tablet) */}
           <div className="bg-white rounded-3xl shadow-xs border border-slate-200/80 overflow-hidden">
-            <div className="p-5 border-b border-slate-100 bg-slate-50/70 flex justify-between items-center">
+            <div className="p-5 border-b border-slate-100 bg-slate-50/70 flex flex-wrap justify-between items-center gap-2">
               <h3 className="font-bold text-slate-900 text-sm">
                 {isIndo ? "Riwayat Rekonsiliasi Shift" : "Shift Reconciliation History"}
               </h3>
+              <button
+                type="button"
+                onClick={handleExportShifts}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs transition cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Ekspor Excel (.xlsx)</span>
+              </button>
             </div>
 
             <div className="hidden md:block overflow-x-auto">

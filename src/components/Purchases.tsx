@@ -30,6 +30,9 @@ import { CustomDatePicker } from "./common/CustomDatePicker";
 import { CurrencyInput } from "./common/CurrencyInput";
 import { toast } from "../context/ToastContext";
 import { exportToCSV } from "../utils/export";
+import { buildStyledWorkbook } from "../utils/excelTemplate";
+import { groupImportedPurchaseOrders } from "../utils/importHelpers";
+import { CsvImportExport } from "./common/CsvImportExport";
 import { computeCashAccountBalances } from "../utils/financeMetrics";
 import { getLocalDateString, getLocalPeriodString } from "../utils/dateUtils";
 import {
@@ -501,28 +504,162 @@ export const Purchases = () => {
     toast.success(`PO ${poNumber} berhasil dibuat.`);
   };
 
-  const handleExportHistory = () => {
+  const handleExportHistory = async () => {
     if (filteredHistoryPOs.length === 0) {
       toast.warning("Tidak ada data Purchase Order yang cocok untuk diekspor.");
       return;
     }
-    const dataToExport = filteredHistoryPOs.map((po) => {
-      const supplier = suppliers.find((s) => s.id === po.supplierId);
-      return {
-        PONumber: po.poNumber,
-        Date: new Date(po.date).toLocaleDateString("id-ID"),
-        Supplier: supplier?.name || po.supplierName || "Unknown",
-        TotalAmount: po.totalAmount,
-        AmountPaid: po.amountPaid || 0,
-        Status: po.status,
-        DeliveryStatus: po.deliveryStatus,
-        ItemsCount: po.items.reduce((sum, item) => sum + item.quantity, 0),
-      };
-    });
-    exportToCSV("Node_Supply_Purchase_Orders", dataToExport);
-    toast.success(
-      `${filteredHistoryPOs.length} riwayat PO berhasil diekspor ke CSV.`
-    );
+    try {
+      const brandSlug = (settings?.brandName || "Julias").replace(/[^a-zA-Z0-9]+/g, "_");
+      let grandTotal = 0;
+      let grandPaid = 0;
+
+      const summaryRows = filteredHistoryPOs.map((po) => {
+        const supplier = suppliers.find((s) => s.id === po.supplierId);
+        const totalAmt = Math.round(Number(po.totalAmount) || 0);
+        const paidAmt = Math.round(Number(po.amountPaid) || 0);
+        const remainAmt = Math.max(0, totalAmt - paidAmt);
+        grandTotal += totalAmt;
+        grandPaid += paidAmt;
+        return [
+          po.poNumber,
+          String(po.date).slice(0, 10),
+          supplier?.name || po.supplierName || "-",
+          po.purchaseType === "MARKET" ? "Belanja Pasar" : "PO Distributor",
+          po.items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0),
+          totalAmt,
+          paidAmt,
+          remainAmt,
+          po.status === "PAID" ? "LUNAS" : po.status === "PARTIAL" ? "SEBAGIAN" : "HUTANG",
+          po.deliveryStatus === "RECEIVED" ? "DITERIMA" : "MENUNGGU",
+          po.dueDate ? String(po.dueDate).slice(0, 10) : "-",
+        ];
+      });
+
+      const itemRows = filteredHistoryPOs.flatMap((po) => {
+        const supplier = suppliers.find((s) => s.id === po.supplierId);
+        return po.items.map((item) => {
+          const ingName =
+            ingredients.find((i) => i.id === item.productId)?.name || item.productId;
+          return [
+            po.poNumber,
+            String(po.date).slice(0, 10),
+            supplier?.name || po.supplierName || "-",
+            ingName,
+            item.quantity,
+            item.unit || "-",
+            Math.round(Number(item.unitPrice) || 0),
+            Math.round(Number(item.subtotal) || 0),
+          ];
+        });
+      });
+
+      await buildStyledWorkbook({
+        filename: `Laporan_Pembelian_PO_${brandSlug}_${getLocalDateString()}`,
+        sheets: [
+          {
+            name: "Ringkasan PO",
+            title: "Laporan Purchase Order & Hutang Supplier",
+            subtitle: `${filteredHistoryPOs.length} transaksi pembelian • Diekspor ${getLocalDateString()}`,
+            headers: [
+              "No. PO",
+              "Tanggal",
+              "Supplier / Pasar",
+              "Jenis",
+              "Total Qty Item",
+              "Total Tagihan (Rp)",
+              "Sudah Dibayar (Rp)",
+              "Sisa Hutang (Rp)",
+              "Status Bayar",
+              "Status Kirim",
+              "Jatuh Tempo",
+            ],
+            rows: summaryRows,
+            columnFormats: [
+              "text",
+              "date",
+              "text",
+              "text",
+              "number",
+              "currency",
+              "currency",
+              "currency",
+              "text",
+              "text",
+              "date",
+            ],
+            totalRow: [
+              "TOTAL",
+              "",
+              `${filteredHistoryPOs.length} Faktur`,
+              "",
+              "",
+              grandTotal,
+              grandPaid,
+              Math.max(0, grandTotal - grandPaid),
+              "",
+              "",
+              "",
+            ],
+          },
+          {
+            name: "Rincian Item PO",
+            title: "Rincian Bahan Baku per Purchase Order",
+            headers: [
+              "No. PO",
+              "Tanggal",
+              "Supplier / Pasar",
+              "Nama Bahan",
+              "Qty",
+              "Satuan",
+              "Harga Satuan (Rp)",
+              "Subtotal (Rp)",
+            ],
+            rows: itemRows,
+            columnFormats: [
+              "text",
+              "date",
+              "text",
+              "text",
+              "number",
+              "text",
+              "currency",
+              "currency",
+            ],
+            totalRow: ["", "", "", "TOTAL RINCIAN", "", "", "", grandTotal],
+          },
+        ],
+      });
+      toast.success(`${filteredHistoryPOs.length} riwayat PO berhasil diekspor ke Excel (.xlsx).`);
+    } catch (err: any) {
+      toast.error("Gagal mengekspor riwayat PO: " + (err?.message || err));
+    }
+  };
+
+  const handleImportPurchaseOrders = (data: any[]) => {
+    if (isReadOnly) return { added: 0, updated: 0, skipped: data.length };
+    const { ordersToCreate, skipped, duplicatePoCount, closedSkipped } =
+      groupImportedPurchaseOrders(data, suppliers, ingredients, {
+        existingPurchaseOrders: purchaseOrders,
+        closedPeriods,
+      });
+
+    ordersToCreate.forEach((po) => addPurchaseOrder(po));
+    const totalSkipped = skipped + duplicatePoCount + closedSkipped;
+
+    if (ordersToCreate.length > 0) {
+      toast.success(
+        `Berhasil membuat ${ordersToCreate.length} Purchase Order baru.` +
+          (totalSkipped > 0 ? ` (${totalSkipped} baris dilewati)` : "")
+      );
+    } else {
+      toast.warning(
+        duplicatePoCount > 0
+          ? `${duplicatePoCount} nomor PO sudah terdaftar di sistem.`
+          : "Tidak ada baris PO valid yang dapat diimpor. Pastikan Supplier & Nama Bahan terdaftar."
+      );
+    }
+    return { added: ordersToCreate.length, updated: 0, skipped: totalSkipped };
   };
 
   return (
@@ -1788,14 +1925,88 @@ export const Purchases = () => {
                 Daftar semua faktur pembelian dari distributor rekanan dan belanja eceran kafe.
               </p>
             </div>
-            <button
-              type="button"
-              onClick={handleExportHistory}
-              className="whitespace-nowrap shrink-0 flex items-center px-3.5 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700 active:scale-95 transition-all shadow-xs text-xs font-bold cursor-pointer"
-            >
-              <Download className="h-3.5 w-3.5 mr-1.5 text-slate-500 shrink-0" />
-              <span>{isIndo ? "Ekspor CSV" : "Export CSV"}</span>
-            </button>
+            <div className="flex items-center gap-2">
+              <CsvImportExport
+                onImport={handleImportPurchaseOrders}
+                canImport={!isReadOnly}
+                allowBulkEdit={false}
+                requiredHeaders={["Supplier", "Nama Bahan", "Jumlah Beli"]}
+                exportFilename={`Daftar_Purchase_Order_${getLocalDateString()}`}
+                exportTitle="Daftar Item Purchase Order"
+                templateFilename="Template_Import_PO.xlsx"
+                buttonLabel={!isReadOnly ? "Impor PO / Ekspor" : "Ekspor PO"}
+                templateHeaders={[
+                  "No. PO",
+                  "Tanggal",
+                  "Supplier",
+                  "Nama Bahan",
+                  "Jumlah Beli",
+                  "Satuan",
+                  "Harga Satuan",
+                  "Jatuh Tempo",
+                  "Catatan",
+                ]}
+                templateExampleRow={[
+                  `PO-${getLocalPeriodString().replace("-", "")}-0001`,
+                  getLocalDateString(),
+                  suppliers[0]?.name || "PT Kopi Nikmat",
+                  ingredients[0]?.name || "Kopi Arabika Gayo House Blend",
+                  "5",
+                  ingredients[0]?.purchaseUnit || ingredients[0]?.unit || "Kg",
+                  String(ingredients[0]?.purchasePrice || 220000),
+                  addDaysToLocalDate(getLocalDateString(), 14),
+                  "Pengiriman pagi",
+                ]}
+                templateDropdowns={{
+                  Supplier: suppliers.map((s) => s.name).filter(Boolean),
+                  "Nama Bahan": ingredients.map((i) => i.name).filter(Boolean),
+                }}
+                templateColumnTypes={{
+                  Tanggal: "date",
+                  "Jumlah Beli": "number",
+                  "Harga Satuan": "integer",
+                  "Jatuh Tempo": "date",
+                }}
+                templateFormats={{
+                  "No. PO": "text",
+                  Tanggal: "date",
+                  "Jumlah Beli": "number",
+                  "Harga Satuan": "currency",
+                  "Jatuh Tempo": "date",
+                }}
+                templateHints={{
+                  "No. PO": "Gunakan No. PO sama di beberapa baris untuk menggabungkan banyak item ke 1 faktur",
+                  Supplier: "Pilih nama supplier terdaftar dari dropdown",
+                  "Nama Bahan": "Pilih nama bahan baku terdaftar dari dropdown",
+                }}
+                currentData={purchaseOrders.flatMap((po) => {
+                  const supName = suppliers.find((s) => s.id === po.supplierId)?.name || po.supplierName || "-";
+                  return po.items.map((item) => {
+                    const ingName =
+                      ingredients.find((i) => i.id === item.productId)?.name || item.productId;
+                    return {
+                      "No. PO": po.poNumber,
+                      Tanggal: String(po.date).slice(0, 10),
+                      Supplier: supName,
+                      "Nama Bahan": ingName,
+                      "Jumlah Beli": item.quantity,
+                      Satuan: item.unit || "",
+                      "Harga Satuan": Math.round(Number(item.unitPrice) || 0),
+                      "Jatuh Tempo": po.dueDate ? String(po.dueDate).slice(0, 10) : "",
+                      Catatan: "",
+                    };
+                  });
+                })}
+              />
+              <button
+                type="button"
+                onClick={handleExportHistory}
+                className="whitespace-nowrap shrink-0 flex items-center px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl active:scale-95 transition-all shadow-xs text-xs font-bold cursor-pointer"
+              >
+                <Download className="h-3.5 w-3.5 mr-1.5 shrink-0" />
+                <span>{isIndo ? "Ekspor Excel (.xlsx)" : "Export Excel (.xlsx)"}</span>
+              </button>
+            </div>
           </div>
 
           {/* Filter Bar: Status Pills & History Search */}

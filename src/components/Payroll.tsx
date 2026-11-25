@@ -251,7 +251,7 @@ export function Payroll() {
                          dailyChecklists.some((c: any) => c.employeeId === emp.id || c.employeeId === userObj?.id);
 
         const empChecklists = (dailyChecklists || []).filter(
-          (c: any) => (c.employeeId === emp.id || (userObj && c.employeeId === userObj.id)) && c.date.startsWith(period)
+          (c: any) => (c.employeeId === emp.id || (userObj && c.employeeId === userObj.id)) && String(c.date || "").startsWith(period)
         );
         const checklistDays = empChecklists.length;
         const sopBonus = checklistDays >= 20 ? sopBonusRate : 0;
@@ -473,7 +473,7 @@ export function Payroll() {
       (u: any) => u.id === employeeId || (empObj && u.username === empObj.username)
     );
     const empChecklists = (dailyChecklists || []).filter(
-      (c: any) => (c.employeeId === employeeId || (userObj && c.employeeId === userObj.id)) && c.date.startsWith(period)
+      (c: any) => (c.employeeId === employeeId || (userObj && c.employeeId === userObj.id)) && String(c.date || "").startsWith(period)
     );
     const checklistDays = empChecklists.length;
     const expectedDays = Math.max(1, presentDays || 22);
@@ -754,18 +754,22 @@ export function Payroll() {
     return true;
   };
 
-  const handleQuickExportXlsx = () => {
+  const handleQuickExportXlsx = async () => {
     if (currentPeriodRecords.length === 0) {
       toast.warning(`Tidak ada data penggajian untuk periode ${period} yang dapat diekspor.`);
       return;
     }
-    exportPayrollToXlsx({
-      payroll: currentPeriodRecords,
-      employees,
-      settings,
-      periodLabel: `Bulan_${period}`,
-    });
-    toast.success(`Laporan payroll periode ${period} berhasil diekspor ke Excel.`);
+    try {
+      await exportPayrollToXlsx({
+        payroll: currentPeriodRecords,
+        employees,
+        settings,
+        periodLabel: `Bulan_${period}`,
+      });
+      toast.success(`Laporan payroll periode ${period} berhasil diekspor ke Excel.`);
+    } catch (err: any) {
+      toast.error("Gagal mengekspor laporan payroll: " + (err?.message || err));
+    }
   };
 
   const handleSelectManualEmployee = (empId: string) => {

@@ -3,9 +3,11 @@ import { createPortal } from "react-dom";
 import { useStore } from "../store/StoreContext";
 import { toast } from "../context/ToastContext";
 import { ConfirmModal } from "./common/ConfirmModal";
+import { CsvImportExport } from "./common/CsvImportExport";
 import { CustomSelect } from "./common/CustomSelect";
 import { CurrencyInput } from "./common/CurrencyInput";
 import { formatCurrency } from "../utils/format";
+import { buildMenuImportPlan } from "../utils/importHelpers";
 import {
   applyDeleteMenuCategory,
   applyRenameMenuCategory,
@@ -465,6 +467,75 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
     }
   };
 
+  const allMenuCategories = useMemo(() => {
+    const set = new Set<string>();
+    (["BAR", "KITCHEN", "BAKER"] as ProductDivision[]).forEach((div) => {
+      getDivisionMenuCategories(div, settings?.menuCategories, products).forEach((c) =>
+        set.add(c)
+      );
+    });
+    return Array.from(set);
+  }, [settings?.menuCategories, products]);
+
+  const flattenedMenuExport = useMemo(() => {
+    const editRows: Record<string, any>[] = [];
+    const cleanExportRows: Record<string, any>[] = [];
+    for (const p of products) {
+      const vars = Array.isArray(p.variants) && p.variants.length > 0
+        ? p.variants
+        : [{ id: "default", productId: p.id, name: "Reguler", price: 0, packagingCost: 0, estimatedHpp: 0, isAvailable: p.isActive }];
+      for (const v of vars) {
+        const hpp = Math.round(Number(v.estimatedHpp) || 0);
+        const price = Math.round(Number(v.price) || 0);
+        const marginPct = price > 0 ? Math.max(-1, Math.min(1, (price - hpp) / price)) : 0;
+        const baseObj = {
+          id: `${p.id}::${v.id}`,
+          Divisi: p.division,
+          "Grup Produk": p.productGroup || inferProductGroup(p.division, p.category, p.productGroup, v.name),
+          "Kategori Menu": p.category,
+          "Nama Menu": p.name,
+          "Nama Varian": v.name,
+          SKU: v.sku || "",
+          "Harga Jual": price,
+          "Biaya Kemasan": Math.round(Number(v.packagingCost) || 0),
+          "Status Aktif": p.isActive && v.isAvailable !== false ? "AKTIF" : "NONAKTIF",
+          Deskripsi: p.description || "",
+        };
+        editRows.push(baseObj);
+        cleanExportRows.push({
+          ...baseObj,
+          "Estimasi HPP": hpp,
+          "Margin (%)": marginPct,
+        });
+      }
+    }
+    return { editRows, cleanExportRows };
+  }, [products]);
+
+  const handleImportProducts = (data: any[]) => {
+    if (isReadOnly || userRole === "LEADER") {
+      return { added: 0, updated: 0, skipped: data.length };
+    }
+    const plan = buildMenuImportPlan(data, products);
+    plan.productsToUpdate.forEach((p) => updateProduct(p));
+    plan.productsToCreate.forEach((p) => addProduct(p));
+
+    const totalChanges = plan.addedVariants + plan.updatedVariants;
+    if (totalChanges > 0) {
+      showToast(
+        "success",
+        `Berhasil menambah ${plan.addedVariants} varian menu baru & memperbarui ${plan.updatedVariants} varian.`
+      );
+    } else {
+      toast.warning("Tidak ada menu valid yang diimpor. Pastikan kolom Nama Menu & Divisi terisi.");
+    }
+    return {
+      added: plan.addedVariants,
+      updated: plan.updatedVariants,
+      skipped: plan.skipped,
+    };
+  };
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
 
@@ -484,7 +555,82 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
           </p>
         </div>
 
-        <div className="flex items-center gap-2 sm:gap-2.5 shrink-0 flex-nowrap overflow-x-auto no-scrollbar">
+        <div className="flex items-center gap-2 sm:gap-2.5 shrink-0 flex-wrap">
+          <CsvImportExport
+            onImport={handleImportProducts}
+            canImport={!isReadOnly && userRole !== "LEADER"}
+            requiredHeaders={["Divisi", "Nama Menu", "Harga Jual"]}
+            exportFilename="Katalog_Menu_Julias"
+            exportTitle="Katalog Menu, Varian, Harga Jual & HPP"
+            templateFilename="Template_Katalog_Menu.xlsx"
+            buttonLabel={!isReadOnly && userRole !== "LEADER" ? "Impor / Ekspor" : "Ekspor Menu"}
+            templateHeaders={[
+              "Divisi",
+              "Grup Produk",
+              "Kategori Menu",
+              "Nama Menu",
+              "Nama Varian",
+              "SKU",
+              "Harga Jual",
+              "Biaya Kemasan",
+              "Status Aktif",
+              "Deskripsi",
+            ]}
+            templateExampleRow={[
+              "BAR",
+              "MINUMAN",
+              "COFFEE",
+              "Kopi Susu Gula Aren",
+              "Iced 16oz",
+              "KOPI-AREN-16",
+              "22000",
+              "1000",
+              "AKTIF",
+              "Espresso house blend dengan susu segar dan gula aren",
+            ]}
+            currentData={flattenedMenuExport.editRows}
+            exportHeaders={[
+              "Divisi",
+              "Grup Produk",
+              "Kategori Menu",
+              "Nama Menu",
+              "Nama Varian",
+              "SKU",
+              "Harga Jual",
+              "Estimasi HPP",
+              "Margin (%)",
+              "Biaya Kemasan",
+              "Status Aktif",
+            ]}
+            exportRows={flattenedMenuExport.cleanExportRows}
+            templateDropdowns={{
+              Divisi: ["BAR", "KITCHEN", "BAKER"],
+              "Grup Produk": [...PRODUCT_GROUP_OPTIONS],
+              "Kategori Menu": allMenuCategories.length > 0 ? allMenuCategories : ["COFFEE", "NON-COFFEE", "FOOD", "BAKERY"],
+              "Status Aktif": ["AKTIF", "NONAKTIF"],
+            }}
+            templateColumnTypes={{
+              "Harga Jual": "integer",
+              "Biaya Kemasan": "integer",
+            }}
+            templateFormats={{
+              SKU: "text",
+              "Harga Jual": "currency",
+              "Estimasi HPP": "currency",
+              "Margin (%)": "percent",
+              "Biaya Kemasan": "currency",
+            }}
+            templateHints={{
+              Divisi: "Pilih BAR, KITCHEN, atau BAKER",
+              "Nama Menu": "Untuk menu multi-varian, ulangi Nama Menu di baris berbeda dengan Nama Varian berbeda",
+              "Harga Jual": "Harga jual resmi dalam Rupiah (bilangan bulat)",
+              SKU: "Kode SKU opsional (format teks)",
+            }}
+            templateInstructions={[
+              "Jika 1 menu memiliki beberapa varian (misal Hot 8oz & Iced 16oz), buat 2 baris dengan 'Nama Menu' yang sama.",
+              "Untuk mengubah harga massal tanpa duplikasi, gunakan tombol 'Template + Data (Edit Massal)'.",
+            ]}
+          />
           {!isReadOnly && (
             <button
               type="button"

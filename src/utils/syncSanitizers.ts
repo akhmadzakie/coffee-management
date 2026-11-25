@@ -1430,12 +1430,17 @@ export function parseImportedExpenseCategories(
   const validTypeSet = new Set<string>(VALID_EXPENSE_CATEGORY_TYPES);
   const allowedIconSet = new Set(allowedIcons);
   const existingById = new Map((existingCategories || []).map((c) => [c.id, c]));
-  const rootNamesLower = new Set(
-    (existingCategories || [])
-      .filter((c) => !c.parentId)
-      .map((c) => String(c.name || "").trim().toLowerCase())
-      .filter(Boolean)
-  );
+  const rootByNameLower = new Map<string, ExpenseCategory>();
+  const seenKeys = new Set<string>();
+
+  for (const c of existingCategories || []) {
+    const lower = String(c.name || "").trim().toLowerCase();
+    if (!lower) continue;
+    if (!c.parentId && !rootByNameLower.has(lower)) {
+      rootByNameLower.set(lower, c);
+    }
+    seenKeys.add(`${c.parentId || "ROOT"}::${lower}`);
+  }
 
   const toCreate: Omit<ExpenseCategory, "id" | "children">[] = [];
   const toUpdate: ExpenseCategory[] = [];
@@ -1449,12 +1454,19 @@ export function parseImportedExpenseCategories(
       continue;
     }
 
-    const rawType = String(row?.["Tipe"] ?? row?.type ?? "LAINNYA")
+    const rawParentName = String(row?.["Kategori Induk"] ?? row?.parentName ?? "").trim();
+    const matchedParent = rawParentName
+      ? rootByNameLower.get(rawParentName.toLowerCase())
+      : undefined;
+
+    const rawType = String(
+      row?.["Tipe"] ?? row?.type ?? matchedParent?.type ?? "LAINNYA"
+    )
       .trim()
       .toUpperCase();
     const type: ExpenseCategoryType = validTypeSet.has(rawType)
       ? (rawType as ExpenseCategoryType)
-      : "LAINNYA";
+      : matchedParent?.type || "LAINNYA";
 
     const rawColor = String(row?.["Warna"] ?? row?.color ?? "").trim();
     const color = /^#[0-9a-fA-F]{6}$/.test(rawColor) ? rawColor : "#1b2cc0";
@@ -1465,25 +1477,33 @@ export function parseImportedExpenseCategories(
     if (idSistem) {
       const existing = existingById.get(idSistem);
       if (existing) {
-        toUpdate.push({ ...existing, name: rawName, type, color, icon });
+        toUpdate.push({
+          ...existing,
+          name: rawName,
+          type,
+          color,
+          icon,
+          parentId: rawParentName ? matchedParent?.id ?? existing.parentId ?? null : existing.parentId ?? null,
+        });
       } else {
         skipped++;
       }
       continue;
     }
 
-    const lowerName = rawName.toLowerCase();
-    if (rootNamesLower.has(lowerName)) {
+    const parentId = matchedParent?.id ?? null;
+    const dupKey = `${parentId || "ROOT"}::${rawName.toLowerCase()}`;
+    if (seenKeys.has(dupKey)) {
       skipped++;
       continue;
     }
-    rootNamesLower.add(lowerName);
+    seenKeys.add(dupKey);
     toCreate.push({
       name: rawName,
       type,
       color,
       icon,
-      parentId: null,
+      parentId,
       isActive: true,
       sortOrder: 0,
     });

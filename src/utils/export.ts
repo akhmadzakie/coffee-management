@@ -10,6 +10,11 @@ import {
   DailyAttendance,
   KPIRecord,
   Employee,
+  PurchaseOrder,
+  Supplier,
+  Product,
+  DailySalesRecap,
+  ShiftSession,
 } from "../types";
 import { formatCurrency } from "./format";
 import { DEFAULT_STORE_TIMEZONE, getLocalDateString } from "./dateUtils";
@@ -158,12 +163,12 @@ const setupPdfHeader = (
   const pageWidth = doc.internal.pageSize.getWidth();
   const bannerHeight = 48;
 
-  // Brand Header Background
-  doc.setFillColor(30, 58, 138); // blue-900 (navy executive header)
+  // Brand Header Background (Julia's Deep Navy & Brand Blue)
+  doc.setFillColor(15, 24, 96); // brand-900 (#0f1860)
   doc.rect(0, 0, pageWidth, bannerHeight, "F");
 
   // Accent Line at bottom of banner
-  doc.setFillColor(59, 130, 246); // blue-500
+  doc.setFillColor(27, 44, 192); // brand-600 (#1b2cc0)
   doc.rect(0, bannerHeight - 1.5, pageWidth, 1.5, "F");
 
   // --- BARIS 1: BRAND NAME (Kiri) & TANGGAL CETAK (Kanan) ---
@@ -230,6 +235,32 @@ const setupPdfHeader = (
   doc.setTextColor(15, 23, 42); // slate-900
 };
 
+export const formatStockMovementTypeLabel = (type: string): string => {
+  const up = String(type || "").trim().toUpperCase();
+  switch (up) {
+    case "IN":
+      return "Masuk";
+    case "PURCHASE":
+      return "Pembelian";
+    case "PRODUCTION":
+      return "Produksi";
+    case "OUT":
+      return "Keluar";
+    case "USAGE":
+      return "Pemakaian";
+    case "WASTE":
+      return "Waste / Rusak";
+    case "ADJUSTMENT":
+      return "Opname / Koreksi";
+    case "TRANSFER":
+      return "Transfer";
+    case "RETURN":
+      return "Retur";
+    default:
+      return up || "-";
+  }
+};
+
 export const exportSalesToPDF = ({
   sales,
   settings,
@@ -248,7 +279,7 @@ export const exportSalesToPDF = ({
           formatDateIndo(s.date),
           s.menuName,
           s.quantitySold.toString(),
-          formatCurrency(s.totalPrice),
+          formatCurrency(getSaleTransactionAmount(s)),
         ])
       : [["-", "Tidak ada data transaksi di periode ini", "-", "-"]];
 
@@ -263,7 +294,7 @@ export const exportSalesToPDF = ({
               "",
               "TOTAL",
               sales.reduce((a, b) => a + b.quantitySold, 0).toString(),
-              formatCurrency(sales.reduce((a, b) => a + b.totalPrice, 0)),
+              formatCurrency(sales.reduce((a, b) => a + getSaleTransactionAmount(b), 0)),
             ],
           ]
         : [],
@@ -317,7 +348,7 @@ export const exportInventoryToPDF = ({
           return [
             formatDateIndo(m.date),
             ing?.name || "-",
-            m.type === "IN" ? "Masuk" : "Keluar",
+            formatStockMovementTypeLabel(m.type),
             `${m.quantity} ${ing?.unit || ""}`,
             m.createdBy,
           ];
@@ -348,10 +379,11 @@ export const exportInventoryToPDF = ({
     },
     didParseCell: (data) => {
       if (data.section === "body" && data.column.index === 2) {
-        if (data.cell.raw === "Masuk") {
+        const val = String(data.cell.raw || "");
+        if (val === "Masuk" || val === "Pembelian" || val === "Produksi") {
           data.cell.styles.textColor = [5, 150, 105]; // emerald-600
           data.cell.styles.fontStyle = "bold";
-        } else if (data.cell.raw === "Keluar") {
+        } else if (val === "Keluar" || val === "Pemakaian" || val === "Waste / Rusak") {
           data.cell.styles.textColor = [225, 29, 72]; // rose-600
           data.cell.styles.fontStyle = "bold";
         }
@@ -505,7 +537,7 @@ export const exportInventoryToCSV = ({
       Tanggal: formatDateIndo(m.date),
       "Bahan Baku": ing?.name || "-",
       Kategori: ing?.category || "-",
-      "Jenis Mutasi": m.type === "IN" ? "Masuk" : "Keluar",
+      "Jenis Mutasi": formatStockMovementTypeLabel(m.type),
       Jumlah: m.quantity,
       Satuan: ing?.unit || "-",
       Catatan: m.note || "-",
@@ -1341,5 +1373,267 @@ export const exportSinglePayslipPDF = ({
     console.warn("doc.save() direct call skipped (running in non-browser context):", saveErr);
   }
   return doc;
+};
+
+// ─── 4 Modul Tambahan (PO, Katalog Menu, Rekap Omzet Harian, Shift Kasir) ────
+
+export const exportPurchaseOrdersToCSV = ({
+  purchaseOrders,
+  suppliers,
+}: {
+  purchaseOrders: PurchaseOrder[];
+  suppliers: Supplier[];
+}) => {
+  const rows = purchaseOrders.map((po, idx) => {
+    const sup = suppliers.find((s) => s.id === po.supplierId);
+    const total = Math.round(Number(po.totalAmount) || 0);
+    const paid = Math.round(Number(po.amountPaid) || 0);
+    return {
+      No: idx + 1,
+      "No. PO": po.poNumber,
+      Tanggal: formatDateIndo(po.date),
+      Supplier: sup?.name || po.supplierName || "-",
+      Jenis: po.purchaseType === "MARKET" ? "Belanja Pasar" : "PO Distributor",
+      "Total Tagihan (Rp)": total,
+      "Sudah Dibayar (Rp)": paid,
+      "Sisa Hutang (Rp)": Math.max(0, total - paid),
+      "Status Bayar": po.status,
+      "Status Terima": po.deliveryStatus,
+    };
+  });
+  exportToCSV(`Pembelian_PO_${getLocalDateString()}`, rows);
+};
+
+export const exportPurchaseOrdersToPDF = ({
+  purchaseOrders,
+  suppliers,
+  settings,
+  periodLabel,
+}: {
+  purchaseOrders: PurchaseOrder[];
+  suppliers: Supplier[];
+  settings: Settings;
+  periodLabel: string;
+}) => {
+  const doc = createJsPdfDoc("l", "mm", "a4");
+  setupPdfHeader(doc, settings, "Laporan Pembelian & Purchase Order", periodLabel);
+
+  const tableData =
+    purchaseOrders.length > 0
+      ? purchaseOrders.map((po, idx) => {
+          const sup = suppliers.find((s) => s.id === po.supplierId);
+          const total = Math.round(Number(po.totalAmount) || 0);
+          const paid = Math.round(Number(po.amountPaid) || 0);
+          return [
+            String(idx + 1),
+            po.poNumber,
+            formatDateIndo(po.date),
+            sup?.name || po.supplierName || "-",
+            formatCurrency(total),
+            formatCurrency(paid),
+            formatCurrency(Math.max(0, total - paid)),
+            po.status,
+            po.deliveryStatus,
+          ];
+        })
+      : [["-", "-", "-", "Tidak ada data Purchase Order di periode ini", "-", "-", "-", "-", "-"]];
+
+  autoTable(doc, {
+    startY: 56,
+    head: [["No", "No. PO", "Tanggal", "Supplier", "Total", "Dibayar", "Hutang", "Bayar", "Kirim"]],
+    body: tableData,
+    theme: "grid",
+    headStyles: { fillColor: [15, 24, 96], textColor: [255, 255, 255], fontStyle: "bold" },
+    alternateRowStyles: { fillColor: [248, 250, 252] },
+    columnStyles: {
+      0: { halign: "center" },
+      4: { halign: "right" },
+      5: { halign: "right" },
+      6: { halign: "right" },
+    },
+  });
+  doc.save(`Laporan_Pembelian_PO_${periodLabel.replace(/\s+/g, "_")}.pdf`);
+};
+
+export const exportMenuCatalogToCSV = ({ products }: { products: Product[] }) => {
+  const rows = products.flatMap((p) => {
+    const vars = Array.isArray(p.variants) && p.variants.length > 0 ? p.variants : [{ id: "-", productId: p.id, name: "Reguler", price: 0, estimatedHpp: 0, isAvailable: p.isActive }];
+    return vars.map((v) => ({
+      Divisi: p.division,
+      "Kategori Menu": p.category,
+      "Nama Menu": p.name,
+      Varian: v.name,
+      "Harga Jual (Rp)": Math.round(Number(v.price) || 0),
+      "Estimasi HPP (Rp)": Math.round(Number(v.estimatedHpp) || 0),
+      Status: p.isActive && v.isAvailable !== false ? "AKTIF" : "NONAKTIF",
+    }));
+  });
+  exportToCSV(`Katalog_Menu_${getLocalDateString()}`, rows);
+};
+
+export const exportMenuCatalogToPDF = ({
+  products,
+  settings,
+  periodLabel,
+}: {
+  products: Product[];
+  settings: Settings;
+  periodLabel: string;
+}) => {
+  const doc = createJsPdfDoc();
+  setupPdfHeader(doc, settings, "Laporan Katalog Menu & HPP", periodLabel);
+
+  const tableData =
+    products.length > 0
+      ? products.flatMap((p) =>
+          (p.variants && p.variants.length > 0 ? p.variants : [{ name: "Reguler", price: 0, estimatedHpp: 0, isAvailable: p.isActive } as any]).map((v) => {
+            const price = Math.round(Number(v.price) || 0);
+            const hpp = Math.round(Number(v.estimatedHpp) || 0);
+            const marginPct = price > 0 ? (((price - hpp) / price) * 100).toFixed(1) : "0.0";
+            return [
+              p.division,
+              p.category,
+              p.name,
+              v.name,
+              formatCurrency(price),
+              formatCurrency(hpp),
+              `${marginPct}%`,
+            ];
+          })
+        )
+      : [["-", "-", "Belum ada produk di katalog", "-", "-", "-", "-"]];
+
+  autoTable(doc, {
+    startY: 56,
+    head: [["Divisi", "Kategori", "Menu", "Varian", "Harga Jual", "Est. HPP", "Margin"]],
+    body: tableData,
+    theme: "grid",
+    headStyles: { fillColor: [15, 24, 96], textColor: [255, 255, 255], fontStyle: "bold" },
+    alternateRowStyles: { fillColor: [248, 250, 252] },
+    columnStyles: {
+      4: { halign: "right" },
+      5: { halign: "right" },
+      6: { halign: "right" },
+    },
+  });
+  doc.save(`Katalog_Menu_${periodLabel.replace(/\s+/g, "_")}.pdf`);
+};
+
+export const exportDailySalesRecapToCSV = ({ recaps }: { recaps: DailySalesRecap[] }) => {
+  const rows = recaps.map((r, idx) => ({
+    No: idx + 1,
+    Tanggal: r.date,
+    Shift: r.shift || "ALL",
+    Tunai: Math.round(Number(r.cashAmount) || 0),
+    QRIS: Math.round(Number(r.qrisAmount) || 0),
+    EDC: Math.round(Number(r.edcAmount) || 0),
+    Transfer: Math.round(Number(r.transferAmount) || 0),
+    "Online Delivery": Math.round(Number(r.onlineDeliveryAmount) || 0),
+    "Total Omzet": Math.round(Number(r.totalAmount) || 0),
+    Catatan: r.notes || "-",
+  }));
+  exportToCSV(`Rekap_Omzet_Harian_${getLocalDateString()}`, rows);
+};
+
+export const exportDailySalesRecapToPDF = ({
+  recaps,
+  settings,
+  periodLabel,
+}: {
+  recaps: DailySalesRecap[];
+  settings: Settings;
+  periodLabel: string;
+}) => {
+  const doc = createJsPdfDoc("l", "mm", "a4");
+  setupPdfHeader(doc, settings, "Laporan Rekap Omzet Harian", periodLabel);
+
+  const tableData =
+    recaps.length > 0
+      ? recaps.map((r) => [
+          formatDateIndo(r.date),
+          r.shift || "ALL",
+          formatCurrency(r.cashAmount || 0),
+          formatCurrency(r.qrisAmount || 0),
+          formatCurrency(r.edcAmount || 0),
+          formatCurrency(r.transferAmount || 0),
+          formatCurrency(r.onlineDeliveryAmount || 0),
+          formatCurrency(r.totalAmount || 0),
+        ])
+      : [["-", "-", "-", "Tidak ada rekap omzet pada periode ini", "-", "-", "-", "-"]];
+
+  autoTable(doc, {
+    startY: 56,
+    head: [["Tanggal", "Shift", "Tunai", "QRIS", "EDC", "Transfer", "Online", "Total Omzet"]],
+    body: tableData,
+    theme: "grid",
+    headStyles: { fillColor: [15, 24, 96], textColor: [255, 255, 255], fontStyle: "bold" },
+    alternateRowStyles: { fillColor: [248, 250, 252] },
+    columnStyles: {
+      2: { halign: "right" },
+      3: { halign: "right" },
+      4: { halign: "right" },
+      5: { halign: "right" },
+      6: { halign: "right" },
+      7: { halign: "right", fontStyle: "bold" },
+    },
+  });
+  doc.save(`Rekap_Omzet_Harian_${periodLabel.replace(/\s+/g, "_")}.pdf`);
+};
+
+export const exportShiftsToCSV = ({ shifts }: { shifts: ShiftSession[] }) => {
+  const rows = shifts.map((s, idx) => ({
+    No: idx + 1,
+    "Waktu Buka": new Date(s.startTime).toLocaleString("id-ID", { timeZone: DEFAULT_STORE_TIMEZONE }),
+    "Waktu Tutup": s.endTime ? new Date(s.endTime).toLocaleString("id-ID", { timeZone: DEFAULT_STORE_TIMEZONE }) : "-",
+    PIC: s.picEmployeeName || "-",
+    "Modal Awal": Math.round(Number(s.startingCash) || 0),
+    "Kas Diharapkan": Math.round(Number(s.expectedEndingCash) || 0),
+    "Kas Aktual": Math.round(Number(s.actualEndingCash) || 0),
+    Selisih: Math.round(Number(s.difference) || 0),
+    Status: s.status,
+  }));
+  exportToCSV(`Riwayat_Shift_Kasir_${getLocalDateString()}`, rows);
+};
+
+export const exportShiftsToPDF = ({
+  shifts,
+  settings,
+  periodLabel,
+}: {
+  shifts: ShiftSession[];
+  settings: Settings;
+  periodLabel: string;
+}) => {
+  const doc = createJsPdfDoc("l", "mm", "a4");
+  setupPdfHeader(doc, settings, "Laporan Riwayat Shift Kasir", periodLabel);
+
+  const tableData =
+    shifts.length > 0
+      ? shifts.map((s) => [
+          formatDateIndo(s.startTime),
+          s.picEmployeeName || "-",
+          formatCurrency(s.startingCash || 0),
+          s.expectedEndingCash != null ? formatCurrency(s.expectedEndingCash) : "-",
+          s.actualEndingCash != null ? formatCurrency(s.actualEndingCash) : "-",
+          s.difference != null ? formatCurrency(s.difference) : "-",
+          s.status,
+        ])
+      : [["-", "Belum ada data shift pada periode ini", "-", "-", "-", "-", "-"]];
+
+  autoTable(doc, {
+    startY: 56,
+    head: [["Tanggal", "PIC Shift", "Modal Awal", "Ekspektasi", "Aktual", "Selisih", "Status"]],
+    body: tableData,
+    theme: "grid",
+    headStyles: { fillColor: [15, 24, 96], textColor: [255, 255, 255], fontStyle: "bold" },
+    alternateRowStyles: { fillColor: [248, 250, 252] },
+    columnStyles: {
+      2: { halign: "right" },
+      3: { halign: "right" },
+      4: { halign: "right" },
+      5: { halign: "right" },
+    },
+  });
+  doc.save(`Laporan_Shift_Kasir_${periodLabel.replace(/\s+/g, "_")}.pdf`);
 };
 

@@ -79,6 +79,7 @@ import {
   EmployeeStatus,
 } from "../types";
 import { CsvImportExport } from "./common/CsvImportExport";
+import { normalizeTextCode, parseFlexibleDateYmd, parseLocalizedNumber } from "../utils/genericImport";
 
 export function HRManagement() {
   const {
@@ -784,117 +785,206 @@ export function HRManagement() {
   const handleImportEmployees = (data: any[]) => {
     if (!canEditHR) {
       toast.error("Hanya Manager atau Super Admin yang dapat mengimport data karyawan.");
-      return;
+      return { added: 0, updated: 0, skipped: data.length };
     }
     let imported = 0;
     let updated = 0;
+    let skipped = 0;
     data.forEach(row => {
-      const idSistem = row["ID_SISTEM (JANGAN DIUBAH)"];
-      const username = String(row["Username"] || row.username || "").toLowerCase().trim();
+      const idSistem = String(row["ID_SISTEM (JANGAN DIUBAH)"] || "").trim();
+      const username = normalizeTextCode(row["Username"] || row.username).toLowerCase();
       const name = String(row["Nama Karyawan"] || row.name || "").trim();
-      const position = row["Posisi"] || row.position;
-      const department = row["Departemen"] || row.department;
-      if (username && name) {
-        if (idSistem) {
-          const existing = employees.find(e => e.id === idSistem);
-          if (existing) {
-            updateEmployee({
-              ...existing,
-              username: username || existing.username,
-              name,
-              position,
-              department,
-              status: (row["Status"] || existing.status) as EmployeeStatus,
-              employmentType: (row["Tipe"] || existing.employmentType) as EmploymentType
-            });
-            updated++;
-          }
+      const position = String(row["Posisi"] || row.position || "Barista").trim() || "Barista";
+      const department = String(row["Departemen"] || row.department || "BAR").trim() || "BAR";
+      const parsedStartDate = parseFlexibleDateYmd(row["Tanggal Masuk"]) || getLocalDateString();
+      const phone = normalizeTextCode(row["Telepon"] ?? row.phone) || "-";
+      const address = String(row["Alamat"] ?? row.address ?? "").trim() || "-";
+
+      if (!username || !name) {
+        skipped++;
+        return;
+      }
+
+      if (idSistem) {
+        const existing = employees.find(e => e.id === idSistem);
+        if (existing) {
+          updateEmployee({
+            ...existing,
+            username: username || existing.username,
+            name,
+            position,
+            department,
+            status: (row["Status"] || existing.status) as EmployeeStatus,
+            employmentType: (row["Tipe"] || existing.employmentType) as EmploymentType,
+            startDate: parseFlexibleDateYmd(row["Tanggal Masuk"]) || existing.startDate,
+            phone: row["Telepon"] !== undefined && row["Telepon"] !== "" ? phone : existing.phone,
+            address: row["Alamat"] !== undefined && row["Alamat"] !== "" ? address : existing.address,
+          });
+          updated++;
         } else {
-          const dup = employees.some((e) => (e.username || "").toLowerCase().trim() === username);
-          if (!dup) {
-            addEmployee({
-              username,
-              name,
-              position,
-              department,
-              status: (row["Status"] || "AKTIF") as EmployeeStatus,
-              employmentType: (row["Tipe"] || "TETAP") as EmploymentType,
-              startDate: row["Tanggal Masuk"] || getLocalDateString(),
-              endDate: null,
-              phone: String(row["Telepon"] || "-"),
-              address: String(row["Alamat"] || "-"),
-            });
-            imported++;
-          }
+          skipped++;
+        }
+      } else {
+        const dup = employees.some((e) => (e.username || "").toLowerCase().trim() === username);
+        if (!dup) {
+          addEmployee({
+            username,
+            name,
+            position,
+            department,
+            status: (row["Status"] || "AKTIF") as EmployeeStatus,
+            employmentType: (row["Tipe"] || "TETAP") as EmploymentType,
+            startDate: parsedStartDate,
+            endDate: null,
+            phone,
+            address,
+          });
+          imported++;
+        } else {
+          skipped++;
         }
       }
     });
-    if (imported > 0 || updated > 0) toast.success(`Berhasil menambahkan ${imported} data baru dan memperbarui ${updated} data karyawan.`);
-    else toast.warning("Tidak ada data valid yang diimport.");
+    if (imported > 0 || updated > 0) {
+      toast.success(`Berhasil menambahkan ${imported} data baru dan memperbarui ${updated} data karyawan.`);
+    } else {
+      toast.warning("Tidak ada data valid yang diimport.");
+    }
+    return { added: imported, updated, skipped };
   };
 
   const handleImportContracts = (data: any[]) => {
     if (!canEditHR) {
       toast.error("Hanya Manager atau Super Admin yang dapat mengimport kontrak kerja.");
-      return;
+      return { added: 0, updated: 0, skipped: data.length };
     }
     let imported = 0;
+    let updated = 0;
+    let skipped = 0;
     data.forEach(row => {
-      const uname = String(row["Username"] || "").toLowerCase().trim();
+      const idSistem = String(row["ID_SISTEM (JANGAN DIUBAH)"] || "").trim();
+      const uname = normalizeTextCode(row["Username"]).toLowerCase();
       const empId = employees.find(e => (e.username || "").toLowerCase().trim() === uname)?.id;
+      const basicSalary = Math.max(0, Math.round(parseLocalizedNumber(row["Gaji Pokok"])));
+      const positionAllowance = Math.max(0, Math.round(parseLocalizedNumber(row["Tunjangan Jabatan"])));
+      const mealAllowance = Math.max(0, Math.round(parseLocalizedNumber(row["Tunjangan Makan"])));
+      const transportAllowance = Math.max(0, Math.round(parseLocalizedNumber(row["Tunjangan Transport"])));
+      const alphaDeductionPerDay = Math.max(0, Math.round(parseLocalizedNumber(row["Potongan Alpha"])));
+      const kpiBonusTarget = Math.max(0, Math.round(parseLocalizedNumber(row["Target Bonus KPI"])));
+      const startDate = parseFlexibleDateYmd(row["Mulai Kontrak"]) || getLocalDateString();
+      const endDate = parseFlexibleDateYmd(row["Selesai Kontrak"]) || null;
+      const status = String(row["Status"] || "ACTIVE").toUpperCase() === "INACTIVE" ? "INACTIVE" : "ACTIVE";
+
+      if (idSistem) {
+        const existing = contracts.find(c => c.id === idSistem);
+        if (existing) {
+          updateContract({
+            ...existing,
+            employeeId: empId || existing.employeeId,
+            basicSalary,
+            positionAllowance,
+            mealAllowance,
+            transportAllowance,
+            alphaDeductionPerDay,
+            kpiBonusTarget,
+            startDate: parseFlexibleDateYmd(row["Mulai Kontrak"]) || existing.startDate,
+            endDate: row["Selesai Kontrak"] ? endDate : existing.endDate,
+            status,
+          });
+          updated++;
+          return;
+        }
+      }
+
       if (empId) {
         addContract({
           employeeId: empId,
-          basicSalary: Math.max(0, Math.round(Number(row["Gaji Pokok"]) || 0)),
-          positionAllowance: Math.max(0, Math.round(Number(row["Tunjangan Jabatan"]) || 0)),
-          mealAllowance: Math.max(0, Math.round(Number(row["Tunjangan Makan"]) || 0)),
-          transportAllowance: Math.max(0, Math.round(Number(row["Tunjangan Transport"]) || 0)),
-          alphaDeductionPerDay: Math.max(0, Math.round(Number(row["Potongan Alpha"]) || 0)),
-          kpiBonusTarget: Math.max(0, Math.round(Number(row["Target Bonus KPI"]) || 0)),
-          startDate: row["Mulai Kontrak"] || getLocalDateString(),
-          endDate: row["Selesai Kontrak"] || getLocalDateString(),
-          status: "ACTIVE"
+          basicSalary,
+          positionAllowance,
+          mealAllowance,
+          transportAllowance,
+          alphaDeductionPerDay,
+          kpiBonusTarget,
+          startDate,
+          endDate: endDate || getLocalDateString(),
+          status,
         });
         imported++;
+      } else {
+        skipped++;
       }
     });
-    if (imported > 0) toast.success(`Berhasil mengimport ${imported} kontrak.`);
-    else toast.warning("Tidak ada data valid yang diimport. Pastikan Username karyawan sesuai.");
+    if (imported > 0 || updated > 0) {
+      toast.success(`Berhasil menambahkan ${imported} kontrak baru dan memperbarui ${updated} kontrak.`);
+    } else {
+      toast.warning("Tidak ada data valid yang diimport. Pastikan Username karyawan sesuai.");
+    }
+    return { added: imported, updated, skipped };
   };
 
   const handleImportAttendances = (data: any[]) => {
     if (!canEditHR) {
       toast.error("Hanya Manager atau Super Admin yang dapat mengimport rekap absensi.");
-      return;
+      return { added: 0, updated: 0, skipped: data.length };
     }
     let imported = 0;
+    let updated = 0;
+    let skipped = 0;
     data.forEach(row => {
-      const uname = String(row["Username"] || "").toLowerCase().trim();
+      const idSistem = String(row["ID_SISTEM (JANGAN DIUBAH)"] || "").trim();
+      const uname = normalizeTextCode(row["Username"]).toLowerCase();
       const empId = employees.find(e => (e.username || "").toLowerCase().trim() === uname)?.id;
-      const period = row["Periode (YYYY-MM)"];
-      if (empId && period) {
-        const check = validatePayrollMutation({
-          action: "CREATE",
-          recordPeriod: String(period),
-          closedPeriods: closedPeriods || [],
+      const period = normalizeTextCode(row["Periode (YYYY-MM)"]).slice(0, 7);
+      if (!empId || !/^\d{4}-\d{2}$/.test(period)) {
+        skipped++;
+        return;
+      }
+      const check = validatePayrollMutation({
+        action: "CREATE",
+        recordPeriod: period,
+        closedPeriods: closedPeriods || [],
+      });
+      if ("error" in check) {
+        skipped++;
+        return;
+      }
+
+      const payload = {
+        presentDays: Math.max(0, Math.round(parseLocalizedNumber(row["Hadir"]))),
+        sickDays: Math.max(0, Math.round(parseLocalizedNumber(row["Sakit"]))),
+        permissionDays: Math.max(0, Math.round(parseLocalizedNumber(row["Izin"]))),
+        alphaDays: Math.max(0, Math.round(parseLocalizedNumber(row["Alpha"]))),
+        holidayDays: Math.max(0, Math.round(parseLocalizedNumber(row["Libur"]))),
+        workingDays: Math.max(1, Math.round(parseLocalizedNumber(row["Hari Kerja"]) || 26)),
+        notes: String(row["Catatan"] || "").trim(),
+      };
+
+      const existing =
+        (idSistem ? attendances.find(a => a.id === idSistem) : undefined) ||
+        attendances.find(a => a.employeeId === empId && a.period === period);
+
+      if (existing) {
+        updateAttendance({
+          ...existing,
+          ...payload,
+          period,
         });
-        if ("error" in check) return;
+        updated++;
+      } else {
         addAttendance({
           employeeId: empId,
           period,
-          presentDays: Math.max(0, Math.round(Number(row["Hadir"]) || 0)),
-          sickDays: Math.max(0, Math.round(Number(row["Sakit"]) || 0)),
-          permissionDays: Math.max(0, Math.round(Number(row["Izin"]) || 0)),
-          alphaDays: Math.max(0, Math.round(Number(row["Alpha"]) || 0)),
-          holidayDays: Math.max(0, Math.round(Number(row["Libur"]) || 0)),
-          workingDays: Math.max(0, Math.round(Number(row["Hari Kerja"]) || 26)),
-          notes: row["Catatan"] || ""
+          ...payload,
         });
         imported++;
       }
     });
-    if (imported > 0) toast.success(`Berhasil mengimport ${imported} absensi.`);
-    else toast.warning("Tidak ada data valid yang diimport. Pastikan Username & Periode sesuai dan belum tutup buku.");
+    if (imported > 0 || updated > 0) {
+      toast.success(`Berhasil menambahkan ${imported} rekap baru dan memperbarui ${updated} absensi.`);
+    } else {
+      toast.warning("Tidak ada data valid yang diimport. Pastikan Username & Periode sesuai dan belum tutup buku.");
+    }
+    return { added: imported, updated, skipped };
   };
 
   const handleOpenContractModal = (contract?: any, employeeId?: string) => {
@@ -1933,38 +2023,55 @@ export function HRManagement() {
                 <h3 className="text-lg font-bold text-slate-800">
                   {isIndo ? "Data Karyawan" : "Employee Data"}
                 </h3>
-                {canEditHR && (
-                  <div className="flex items-center gap-2.5 shrink-0 flex-nowrap">
-                    <CsvImportExport
-                      onImport={handleImportEmployees}
-                      templateHeaders={["Username", "Nama Karyawan", "Posisi", "Departemen", "Status", "Tipe"]}
-                      templateExampleRow={["EMP-001", "Budi Santoso", "Barista", "Operasional", "AKTIF", "TETAP"]}
-                      currentData={employees.map(e => ({
-                        id: e.id,
-                        "Username": e.username || "",
-                        "Nama Karyawan": e.name,
-                        "Posisi": e.position,
-                        "Departemen": e.department,
-                        "Status": e.status,
-                        "Tipe": e.employmentType
-                      }))}
-                      templateFilename="template_karyawan"
-                      buttonLabel={isIndo ? "Import" : "Import"}
-                      templateDropdowns={{
-                        "Posisi": ["Kasir", "Barista", "Chef", "Baker", "Leader", "Manager", "Finance"],
-                        "Departemen": ["BAR", "KITCHEN", "BAKER", "MANAGEMENT", "FINANCE"],
-                        "Status": ["AKTIF", "TIDAK_AKTIF", "RESIGN", "PHK"],
-                        "Tipe": ["TETAP", "KONTRAK", "PARUH_WAKTU", "MAGANG"],
-                      }}
-                      templateHints={{
-                        "Username": "ID / Username unik karyawan",
-                        "Nama Karyawan": "Nama lengkap karyawan",
-                        "Posisi": "Pilih jabatan",
-                        "Departemen": "Pilih divisi/departemen",
-                        "Status": "Status keaktifan",
-                        "Tipe": "Tipe ikatan kerja",
-                      }}
-                    />
+                <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
+                  <CsvImportExport
+                    onImport={handleImportEmployees}
+                    canImport={canEditHR}
+                    requiredHeaders={["Username", "Nama Karyawan"]}
+                    exportFilename="Data_Karyawan"
+                    exportTitle="Daftar Karyawan Aktif & Non-Aktif"
+                    templateHeaders={["Username", "Nama Karyawan", "Posisi", "Departemen", "Status", "Tipe", "Tanggal Masuk", "Telepon", "Alamat"]}
+                    templateExampleRow={["EMP-001", "Budi Santoso", "Barista", "BAR", "AKTIF", "TETAP", getLocalDateString(), "081234567890", "Jl. Merdeka No. 10"]}
+                    currentData={employees.map(e => ({
+                      id: e.id,
+                      "Username": e.username || "",
+                      "Nama Karyawan": e.name,
+                      "Posisi": e.position,
+                      "Departemen": e.department,
+                      "Status": e.status,
+                      "Tipe": e.employmentType,
+                      "Tanggal Masuk": String(e.startDate || "").slice(0, 10),
+                      "Telepon": e.phone || "",
+                      "Alamat": e.address || "",
+                    }))}
+                    templateFilename="template_karyawan"
+                    buttonLabel={canEditHR ? (isIndo ? "Impor / Ekspor" : "Import / Export") : (isIndo ? "Ekspor Data" : "Export Data")}
+                    templateDropdowns={{
+                      "Posisi": ["Kasir", "Barista", "Chef", "Baker", "Leader", "Manager", "Finance"],
+                      "Departemen": ["BAR", "KITCHEN", "BAKER", "MANAGEMENT", "FINANCE"],
+                      "Status": ["AKTIF", "TIDAK_AKTIF", "RESIGN", "PHK"],
+                      "Tipe": ["TETAP", "KONTRAK", "PARUH_WAKTU", "MAGANG"],
+                    }}
+                    templateColumnTypes={{
+                      "Tanggal Masuk": "date",
+                    }}
+                    templateFormats={{
+                      "Username": "text",
+                      "Telepon": "text",
+                      "Tanggal Masuk": "date",
+                    }}
+                    templateHints={{
+                      "Username": "ID / Username unik karyawan",
+                      "Nama Karyawan": "Nama lengkap karyawan",
+                      "Posisi": "Pilih jabatan",
+                      "Departemen": "Pilih divisi/departemen",
+                      "Status": "Status keaktifan",
+                      "Tipe": "Tipe ikatan kerja",
+                      "Tanggal Masuk": "Format YYYY-MM-DD",
+                      "Telepon": "No. HP/WA (format teks agar angka 0 terjaga)",
+                    }}
+                  />
+                  {canEditHR && (
                     <button
                       onClick={() => handleOpenEmployeeModal()}
                       className="px-4 py-2 bg-brand-600 text-white rounded-xl font-medium flex items-center gap-2 hover:bg-brand-700 transition-colors shadow-xs whitespace-nowrap shrink-0"
@@ -1972,8 +2079,8 @@ export function HRManagement() {
                       <Plus className="w-4 h-4 shrink-0" />{" "}
                       {isIndo ? "Tambah Karyawan" : "Add Employee"}
                     </button>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
 
               {/* Banner Sinkronisasi Akun Login Eksisting ke SDM */}
@@ -2191,37 +2298,70 @@ export function HRManagement() {
                 <h3 className="text-lg font-bold text-slate-800">
                   {isIndo ? "Struktur Gaji & Kontrak" : "Salary & Contracts"}
                 </h3>
-                {canEditHR && (
-                  <div className="flex items-center gap-2.5 shrink-0 flex-nowrap">
-                    <CsvImportExport
-                      onImport={handleImportContracts}
-                      templateHeaders={["Username", "Gaji Pokok", "Tunjangan Jabatan", "Tunjangan Makan", "Tunjangan Transport", "Target Bonus KPI", "Mulai Kontrak", "Selesai Kontrak"]}
-                      templateExampleRow={["EMP-001", "3500000", "500000", "20000", "20000", "500000", "2024-01-01", "2024-12-31"]}
-                      templateFilename="template_kontrak"
-                      buttonLabel={isIndo ? "Import" : "Import"}
-                      templateDropdowns={{
-                        Username: employees.map(e => e.username).filter(Boolean),
-                      }}
-                      templateColumnTypes={{
-                        "Gaji Pokok": "number",
-                        "Tunjangan Jabatan": "number",
-                        "Tunjangan Makan": "number",
-                        "Tunjangan Transport": "number",
-                        "Target Bonus KPI": "number",
-                        "Mulai Kontrak": "date",
-                        "Selesai Kontrak": "date",
-                      }}
-                      templateHints={{
-                        Username: "Pilih username karyawan dari daftar dropdown",
-                        "Mulai Kontrak": "Format YYYY-MM-DD",
-                        "Selesai Kontrak": "Format YYYY-MM-DD",
-                      }}
-                    />
+                <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
+                  <CsvImportExport
+                    onImport={handleImportContracts}
+                    canImport={canEditHR}
+                    requiredHeaders={["Username", "Gaji Pokok"]}
+                    exportFilename="Data_Kontrak_Gaji_Karyawan"
+                    exportTitle="Daftar Struktur Gaji & Kontrak Kerja"
+                    templateHeaders={["Username", "Gaji Pokok", "Tunjangan Jabatan", "Tunjangan Makan", "Tunjangan Transport", "Potongan Alpha", "Target Bonus KPI", "Mulai Kontrak", "Selesai Kontrak", "Status"]}
+                    templateExampleRow={[employees[0]?.username || "EMP-001", "3500000", "500000", "20000", "20000", "100000", "500000", getLocalDateString(), "", "ACTIVE"]}
+                    currentData={contracts.map(c => {
+                      const emp = employees.find(e => e.id === c.employeeId);
+                      return {
+                        id: c.id,
+                        "Username": emp?.username || "",
+                        "Gaji Pokok": c.basicSalary,
+                        "Tunjangan Jabatan": c.positionAllowance,
+                        "Tunjangan Makan": c.mealAllowance,
+                        "Tunjangan Transport": c.transportAllowance,
+                        "Potongan Alpha": c.alphaDeductionPerDay ?? 0,
+                        "Target Bonus KPI": c.kpiBonusTarget,
+                        "Mulai Kontrak": String(c.startDate || "").slice(0, 10),
+                        "Selesai Kontrak": c.endDate ? String(c.endDate).slice(0, 10) : "",
+                        "Status": c.status,
+                      };
+                    })}
+                    templateFilename="template_kontrak"
+                    buttonLabel={canEditHR ? (isIndo ? "Impor / Ekspor" : "Import / Export") : (isIndo ? "Ekspor Data" : "Export Data")}
+                    templateDropdowns={{
+                      Username: employees.map(e => e.username).filter(Boolean),
+                      Status: ["ACTIVE", "INACTIVE"],
+                    }}
+                    templateColumnTypes={{
+                      "Gaji Pokok": "integer",
+                      "Tunjangan Jabatan": "integer",
+                      "Tunjangan Makan": "integer",
+                      "Tunjangan Transport": "integer",
+                      "Potongan Alpha": "integer",
+                      "Target Bonus KPI": "integer",
+                      "Mulai Kontrak": "date",
+                      "Selesai Kontrak": "date",
+                    }}
+                    templateFormats={{
+                      Username: "text",
+                      "Gaji Pokok": "currency",
+                      "Tunjangan Jabatan": "currency",
+                      "Tunjangan Makan": "currency",
+                      "Tunjangan Transport": "currency",
+                      "Potongan Alpha": "currency",
+                      "Target Bonus KPI": "currency",
+                      "Mulai Kontrak": "date",
+                      "Selesai Kontrak": "date",
+                    }}
+                    templateHints={{
+                      Username: "Pilih username karyawan dari daftar dropdown",
+                      "Mulai Kontrak": "Format YYYY-MM-DD",
+                      "Selesai Kontrak": "Format YYYY-MM-DD (kosongkan jika permanen)",
+                    }}
+                  />
+                  {canEditHR && (
                     <button onClick={() => handleOpenContractModal()} className="px-4 py-2 bg-brand-600 text-white rounded-xl font-medium flex items-center gap-2 hover:bg-brand-700 transition-colors shadow-xs whitespace-nowrap shrink-0">
                       <Plus className="w-4 h-4 shrink-0" /> {isIndo ? "Tambah Kontrak" : "Add Contract"}
                     </button>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
 
               {/* Pengingat jika ada akun login eksisting belum masuk SDM untuk dibuatkan kontrak */}
@@ -2875,35 +3015,60 @@ export function HRManagement() {
                     placeholder="Pilih Periode Rekap"
                     buttonClassName="py-2 px-3 text-xs bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700"
                   />
+                  <CsvImportExport
+                    onImport={handleImportAttendances}
+                    canImport={canEditHR}
+                    requiredHeaders={["Username", "Periode (YYYY-MM)"]}
+                    exportFilename={`Rekap_Absensi_${attendanceRecapPeriod || getLocalPeriodString()}`}
+                    exportTitle={`Rekap Absensi Bulanan (${attendanceRecapPeriod || getLocalPeriodString()})`}
+                    templateHeaders={["Username", "Periode (YYYY-MM)", "Hadir", "Sakit", "Izin", "Alpha", "Libur", "Hari Kerja", "Catatan"]}
+                    templateExampleRow={[employees[0]?.username || "EMP-001", getLocalPeriodString(), "24", "1", "0", "0", "4", "26", "Disiplin baik"]}
+                    currentData={attendances
+                      .filter(a => !attendanceRecapPeriod || a.period === attendanceRecapPeriod)
+                      .map(a => {
+                        const emp = employees.find(e => e.id === a.employeeId);
+                        return {
+                          id: a.id,
+                          "Username": emp?.username || "",
+                          "Periode (YYYY-MM)": a.period,
+                          "Hadir": a.presentDays,
+                          "Sakit": a.sickDays,
+                          "Izin": a.permissionDays,
+                          "Alpha": a.alphaDays,
+                          "Libur": a.holidayDays,
+                          "Hari Kerja": a.workingDays,
+                          "Catatan": a.notes || "",
+                        };
+                      })}
+                    templateFilename="template_absensi"
+                    buttonLabel={canEditHR ? (isIndo ? "Impor / Ekspor" : "Import / Export") : (isIndo ? "Ekspor Data" : "Export Data")}
+                    templateDropdowns={{
+                      Username: employees.map(e => e.username).filter(Boolean),
+                    }}
+                    templateColumnTypes={{
+                      Hadir: "integer",
+                      Sakit: "integer",
+                      Izin: "integer",
+                      Alpha: "integer",
+                      Libur: "integer",
+                      "Hari Kerja": "integer",
+                    }}
+                    templateFormats={{
+                      Username: "text",
+                      "Periode (YYYY-MM)": "text",
+                    }}
+                    templateHints={{
+                      Username: "Pilih username karyawan",
+                      "Periode (YYYY-MM)": `Format: YYYY-MM (contoh: ${getLocalPeriodString()})`,
+                    }}
+                  />
                   {canEditHR && (
-                    <>
-                      <CsvImportExport
-                        onImport={handleImportAttendances}
-                        templateHeaders={["Username", "Periode (YYYY-MM)", "Hadir", "Sakit", "Izin", "Alpha", "Catatan"]}
-                        templateExampleRow={["EMP-001", "2024-01", "22", "1", "0", "0", "Rajin"]}
-                        templateFilename="template_absensi"
-                        buttonLabel={isIndo ? "Import" : "Import"}
-                        templateDropdowns={{
-                          Username: employees.map(e => e.username).filter(Boolean),
-                        }}
-                        templateColumnTypes={{
-                          Hadir: "integer",
-                          Sakit: "integer",
-                          Izin: "integer",
-                          Alpha: "integer",
-                        }}
-                        templateHints={{
-                          Username: "Pilih username karyawan",
-                          "Periode (YYYY-MM)": "Format: YYYY-MM (contoh: 2024-10)",
-                        }}
-                      />
-                      <button
-                        onClick={() => handleOpenAttendanceModal()}
-                        className="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm shadow-brand-600/20 transition-colors cursor-pointer"
-                      >
-                        <Plus className="w-4 h-4" /> {isIndo ? "Tambah Absensi" : "Add Attendance"}
-                      </button>
-                    </>
+                    <button
+                      onClick={() => handleOpenAttendanceModal()}
+                      className="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm shadow-brand-600/20 transition-colors cursor-pointer"
+                    >
+                      <Plus className="w-4 h-4" /> {isIndo ? "Tambah Absensi" : "Add Attendance"}
+                    </button>
                   )}
                 </div>
               </div>

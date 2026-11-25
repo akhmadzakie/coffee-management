@@ -7,7 +7,7 @@ import { toast } from "../context/ToastContext";
 import { ThemeToggleButton } from "../context/ThemeContext";
 import { resolveBrandLogo } from "../utils/brandLogo";
 import { SwitchAccountModal } from "./SwitchAccountModal";
-import { ExportModal } from "./ExportModal";
+import { ExportModal, type ExportModuleType } from "./ExportModal";
 import { AIAssistantModal, type ParsedTransactionDraft } from "./AIAssistantModal";
 import { ManagerApprovalModal } from "./ManagerApprovalModal";
 import { FEATURES } from "../config/features";
@@ -89,7 +89,7 @@ export const Layout: React.FC<LayoutProps> = ({
   const [isSwitchAccountOpen, setIsSwitchAccountOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [exportModalModule, setExportModalModule] = useState<
-    "sales" | "inventory" | "finance" | "payroll" | "attendance" | "kpi" | "executive"
+    ExportModuleType | "executive"
   >("sales");
   const [isAIAssistantOpen, setIsAIAssistantOpen] = useState(false);
   const [isManagerApprovalOpen, setIsManagerApprovalOpen] = useState(false);
@@ -1317,13 +1317,19 @@ export const Layout: React.FC<LayoutProps> = ({
                 whileTap={{ scale: 0.95 }}
                 onClick={() => {
                   if (currentView === "import_sales") setExportModalModule("sales");
-                  else if (currentView === "inventory" || currentView === "purchases")
+                  else if (currentView === "inventory")
                     setExportModalModule("inventory");
+                  else if (currentView === "purchases")
+                    setExportModalModule("purchases");
+                  else if (currentView === "menu")
+                    setExportModalModule("menu_catalog");
                   else if (currentView === "finance_reports" || currentView === "cash_flow")
                     setExportModalModule("finance");
                   else if (currentView === "payroll")
                     setExportModalModule("payroll");
-                  else if (currentView === "attendance_clock" || currentView === "shifts")
+                  else if (currentView === "shifts")
+                    setExportModalModule("shifts");
+                  else if (currentView === "attendance_clock")
                     setExportModalModule("attendance");
                   else if (currentView === "hr")
                     setExportModalModule("payroll");

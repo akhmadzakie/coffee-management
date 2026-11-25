@@ -24,11 +24,18 @@ import {
   Lock,
   Eye,
   X,
+  Download,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { formatCurrency } from "../utils/format";
-import { getLocalPeriodString } from "../utils/dateUtils";
+import { getLocalDateString, getLocalPeriodString } from "../utils/dateUtils";
 import { getLocalPeriodFromTimestamp } from "../utils/syncSanitizers";
+import { buildStyledWorkbook, buildTemplateWithDropdown } from "../utils/excelTemplate";
+import {
+  parseFlexibleDateYmd,
+  parseLocalizedNumber,
+  parseSpreadsheetToRawRows,
+} from "../utils/genericImport";
 import {
   matchBankStatementLines,
   parseBankStatementCsv,
@@ -192,11 +199,87 @@ export const BankReconciliationComponent: React.FC = () => {
     };
   }, [existingLines, existingReconciliation]);
 
-  // Handle CSV Upload
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Handle CSV / Excel Upload
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
+
+    const lowerName = file.name.toLowerCase();
+    if (lowerName.endsWith(".xlsx") || lowerName.endsWith(".xls")) {
+      try {
+        const rawRows = await parseSpreadsheetToRawRows(file);
+        const mappedLines: Record<string, string>[] = [];
+        for (const r of rawRows) {
+          const normEntries = Object.entries(r).map(([k, v]) => [
+            k.replace(/\*/g, "").trim().toLowerCase(),
+            v,
+          ]);
+          const getVal = (keys: string[]) => {
+            for (const key of keys) {
+              const found = normEntries.find(([k]) => k === key || k.includes(key));
+              if (found && found[1] !== "" && found[1] !== null && found[1] !== undefined) {
+                return found[1];
+              }
+            }
+            return undefined;
+          };
+
+          const rawDate = getVal(["tanggal", "date", "tgl"]);
+          const dateYmd = parseFlexibleDateYmd(rawDate);
+          const desc = String(
+            getVal(["keterangan", "description", "uraian", "berita", "remark"]) ?? ""
+          ).trim();
+          const rawNominal = getVal(["nominal", "amount", "jumlah", "mutasi", "nilai"]);
+          const rawCredit = getVal(["kredit", "credit", "masuk"]);
+          const rawDebit = getVal(["debit", "keluar"]);
+          const rawType = String(getVal(["jenis", "type", "dk", "d/k"]) ?? "").trim().toUpperCase();
+
+          let amount = Math.abs(Math.round(parseLocalizedNumber(rawNominal)));
+          let txType = rawType;
+
+          if (amount <= 0) {
+            const cr = Math.abs(Math.round(parseLocalizedNumber(rawCredit)));
+            const db = Math.abs(Math.round(parseLocalizedNumber(rawDebit)));
+            if (cr > 0) {
+              amount = cr;
+              txType = "CREDIT";
+            } else if (db > 0) {
+              amount = db;
+              txType = "DEBIT";
+            }
+          }
+
+          if (!dateYmd || amount <= 0) continue;
+          if (!txType) txType = "CREDIT";
+          if (txType.includes("MASUK") || txType === "CR" || txType === "K" || txType === "KREDIT") {
+            txType = "CREDIT";
+          } else if (txType.includes("KELUAR") || txType === "DB" || txType === "D") {
+            txType = "DEBIT";
+          }
+
+          mappedLines.push({
+            date: dateYmd,
+            description: desc || "Mutasi Rekening",
+            amount: String(amount),
+            type: txType,
+          });
+        }
+
+        if (mappedLines.length === 0) {
+          setCsvFile(null);
+          setUploadedLines([]);
+          toast.error("File Excel tidak memiliki baris mutasi valid (pastikan kolom Tanggal & Nominal terisi).");
+          return;
+        }
+        setCsvFile(file);
+        setUploadedLines(mappedLines);
+        toast.success(`Terdeteksi ${mappedLines.length} baris mutasi bank dari Excel siap diproses.`);
+      } catch (err: any) {
+        toast.error(err?.message || "Gagal membaca file Excel mutasi bank.");
+      }
+      return;
+    }
 
     const reader = new FileReader();
     reader.onload = (event) => {
@@ -216,6 +299,120 @@ export const BankReconciliationComponent: React.FC = () => {
       toast.error("Gagal membaca file CSV mutasi bank.");
     };
     reader.readAsText(file);
+  };
+
+  const handleDownloadBankTemplate = async () => {
+    try {
+      const today = getLocalDateString();
+      await buildTemplateWithDropdown({
+        filename: "Template_Mutasi_Rekonsiliasi_Bank",
+        sheetName: "Mutasi Bank",
+        isExampleFirstRow: true,
+        columns: [
+          {
+            header: "Tanggal",
+            type: "date",
+            format: "date",
+            required: true,
+            width: 16,
+            hint: "Format YYYY-MM-DD",
+          },
+          {
+            header: "Keterangan",
+            type: "text",
+            required: true,
+            width: 38,
+            hint: "Uraian mutasi dari rekening koran",
+          },
+          {
+            header: "Nominal",
+            type: "integer",
+            format: "currency",
+            required: true,
+            width: 18,
+            hint: "Angka bulat tanpa titik/Rp",
+          },
+          {
+            header: "Jenis",
+            options: ["CREDIT", "DEBIT"],
+            required: true,
+            width: 14,
+            hint: "CREDIT = uang masuk, DEBIT = uang keluar",
+          },
+          {
+            header: "No. Referensi",
+            format: "text",
+            width: 22,
+            hint: "Opsional",
+          },
+        ],
+        rows: [[today, "Settlement QRIS Harian", 450000, "CREDIT", "REF-001"]],
+        instructions: [
+          "Pilih Jenis CREDIT untuk dana masuk ke rekening atau DEBIT untuk dana keluar/biaya bank.",
+          "Anda juga tetap bisa mengunggah CSV ekspor langsung dari internet banking BCA/Mandiri/BRI.",
+        ],
+      });
+      toast.success("Template Mutasi Bank (.xlsx) berhasil diunduh.");
+    } catch (err: any) {
+      toast.error("Gagal membuat template mutasi bank: " + (err?.message || err));
+    }
+  };
+
+  const handleExportReconciliation = async () => {
+    if (!existingReconciliation) return;
+    try {
+      const matchedAmt = existingLines
+        .filter((l) => l.isMatched)
+        .reduce((s, l) => s + Math.round(Number(l.amount) || 0), 0);
+      const unmatchedAmt = existingLines
+        .filter((l) => !l.isMatched)
+        .reduce((s, l) => s + Math.round(Number(l.amount) || 0), 0);
+
+      await buildStyledWorkbook({
+        filename: `Rekonsiliasi_Bank_${existingReconciliation.bankName.replace(/\s+/g, "_")}_${existingReconciliation.period}`,
+        sheets: [
+          {
+            name: "Ringkasan Audit",
+            title: `Hasil Rekonsiliasi Bank — ${existingReconciliation.bankName}`,
+            subtitle: `Periode: ${existingReconciliation.period} • Status: ${existingReconciliation.status}`,
+            headers: ["Indikator", "Nilai"],
+            rows: [
+              ["Rekening / Pos Kas", existingReconciliation.bankName],
+              ["Periode", existingReconciliation.period],
+              ["Status Rekonsiliasi", existingReconciliation.status],
+              ["Saldo Awal Rekening Koran", Math.round(Number(existingReconciliation.openingBalance) || 0)],
+              ["Total Kredit (Uang Masuk)", reconMetrics.totalCredit],
+              ["Total Debit (Uang Keluar)", reconMetrics.totalDebit],
+              ["Saldo Akhir Terhitung", reconMetrics.computedClosingBalance],
+              ["Total Baris Mutasi", reconMetrics.totalLines],
+              ["Baris Cocok (Matched)", `${reconMetrics.matchedCount} (${reconMetrics.matchPercentage}%)`],
+              ["Nominal Matched (Rp)", matchedAmt],
+              ["Baris Selisih (Unmatched)", reconMetrics.unmatchedCount],
+              ["Nominal Unmatched (Rp)", unmatchedAmt],
+            ],
+            columnFormats: ["text", "text"],
+          },
+          {
+            name: "Rincian Mutasi",
+            title: "Daftar Mutasi Rekening Koran & Status Pencocokan",
+            subtitle: `${existingReconciliation.bankName} • ${existingReconciliation.period}`,
+            headers: ["Tanggal", "Keterangan", "Jenis", "Nominal (Rp)", "Status Audit", "ID Transaksi Kas"],
+            rows: existingLines.map((l) => [
+              String(l.date).slice(0, 10),
+              l.description || "-",
+              l.transactionType,
+              Math.round(Number(l.amount) || 0),
+              l.isMatched ? "COCOK" : "BELUM COCOK",
+              l.matchedTransactionId || "-",
+            ]),
+            columnFormats: ["date", "text", "text", "currency", "text", "text"],
+          },
+        ],
+      });
+      toast.success("Hasil Rekonsiliasi Bank (.xlsx) berhasil diunduh.");
+    } catch (err: any) {
+      toast.error("Gagal mengekspor rekonsiliasi bank: " + (err?.message || err));
+    }
   };
 
   const processUpload = () => {
@@ -490,10 +687,18 @@ export const BankReconciliationComponent: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pt-1">
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pt-1 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={handleDownloadBankTemplate}
+                      className="px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer transition"
+                    >
+                      <Download className="w-3.5 h-3.5 text-brand-600 dark:text-brand-300" />
+                      <span>Template Excel</span>
+                    </button>
                     <input
                       type="file"
-                      accept=".csv"
+                      accept=".csv,.xlsx,.xls"
                       onChange={handleFileUpload}
                       className="px-3.5 py-2 border border-slate-200 dark:border-slate-700 rounded-xl text-base sm:text-xs text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-900 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-brand-50 file:text-brand-700 hover:file:bg-brand-100 cursor-pointer"
                     />
@@ -622,36 +827,46 @@ export const BankReconciliationComponent: React.FC = () => {
                   </p>
                 </div>
 
-                {existingReconciliation.status === "DRAFT" && canMutate && (
-                  <div className="flex flex-wrap items-center gap-2 shrink-0">
-                    <button
-                      type="button"
-                      onClick={handleRerunAutoMatch}
-                      className="px-3.5 py-2.5 rounded-xl bg-brand-50 dark:bg-brand-500/15 hover:bg-brand-100 text-brand-700 dark:text-brand-300 border border-brand-200 dark:border-brand-500/30 font-bold text-xs transition flex items-center gap-1.5 cursor-pointer"
-                    >
-                      <RefreshCw className="w-3.5 h-3.5" />
-                      <span>Cocokkan Ulang</span>
-                    </button>
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={handleExportReconciliation}
+                    className="px-3.5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Ekspor Hasil (.xlsx)</span>
+                  </button>
+                  {existingReconciliation.status === "DRAFT" && canMutate && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={handleRerunAutoMatch}
+                        className="px-3.5 py-2.5 rounded-xl bg-brand-50 dark:bg-brand-500/15 hover:bg-brand-100 text-brand-700 dark:text-brand-300 border border-brand-200 dark:border-brand-500/30 font-bold text-xs transition flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        <span>Cocokkan Ulang</span>
+                      </button>
 
-                    <button
-                      type="button"
-                      onClick={() => setConfirmAction("delete_draft")}
-                      className="px-3.5 py-2.5 rounded-xl bg-rose-50 dark:bg-rose-500/15 hover:bg-rose-100 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-500/30 font-bold text-xs transition flex items-center gap-1.5 cursor-pointer"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                      <span>Hapus Draft</span>
-                    </button>
+                      <button
+                        type="button"
+                        onClick={() => setConfirmAction("delete_draft")}
+                        className="px-3.5 py-2.5 rounded-xl bg-rose-50 dark:bg-rose-500/15 hover:bg-rose-100 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-500/30 font-bold text-xs transition flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Hapus Draft</span>
+                      </button>
 
-                    <button
-                      type="button"
-                      onClick={() => setConfirmAction("finalize")}
-                      className="px-4 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 active:scale-[0.98] text-white font-bold text-xs shadow-sm shadow-brand-600/20 transition flex items-center gap-2 cursor-pointer"
-                    >
-                      <CheckCircle2 className="w-4 h-4" />
-                      <span>Finalisasi Rekonsiliasi</span>
-                    </button>
-                  </div>
-                )}
+                      <button
+                        type="button"
+                        onClick={() => setConfirmAction("finalize")}
+                        className="px-4 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 active:scale-[0.98] text-white font-bold text-xs shadow-sm shadow-brand-600/20 transition flex items-center gap-2 cursor-pointer"
+                      >
+                        <CheckCircle2 className="w-4 h-4" />
+                        <span>Finalisasi Rekonsiliasi</span>
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
 
               {/* Dual-View Data: Tabel Mutasi Bank */}

@@ -800,7 +800,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
   const handleExportExecutiveXlsx = async () => {
     setIsExporting("xlsx");
     try {
-      exportMasterExecutiveReportXlsx({
+      await exportMasterExecutiveReportXlsx({
         sales: filteredSales,
         finance: filteredTransactions,
         ingredients,

@@ -170,6 +170,19 @@ export const ImportFinanceModal: React.FC<ImportFinanceModalProps> = ({
     }
   };
 
+  const [isDownloadingTemplate, setIsDownloadingTemplate] = useState(false);
+
+  const handleDownloadTemplate = async () => {
+    setIsDownloadingTemplate(true);
+    try {
+      await downloadFinanceImportTemplate(expenseCategories);
+    } catch (err: any) {
+      toast.error("Gagal mengunduh template: " + (err?.message || err));
+    } finally {
+      setIsDownloadingTemplate(false);
+    }
+  };
+
   if (typeof document === "undefined" || isReadOnly) return null;
 
   return createPortal(
@@ -228,10 +241,15 @@ export const ImportFinanceModal: React.FC<ImportFinanceModalProps> = ({
                 </div>
                 <button
                   type="button"
-                  onClick={() => downloadFinanceImportTemplate(expenseCategories)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold rounded-lg transition-colors shrink-0 ml-3 cursor-pointer"
+                  onClick={handleDownloadTemplate}
+                  disabled={isDownloadingTemplate}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-brand-600 hover:bg-brand-700 disabled:opacity-60 text-white text-xs font-bold rounded-lg transition-colors shrink-0 ml-3 cursor-pointer"
                 >
-                  <Download className="w-3.5 h-3.5" />
+                  {isDownloadingTemplate ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Download className="w-3.5 h-3.5" />
+                  )}
                   Template Excel
                 </button>
               </div>

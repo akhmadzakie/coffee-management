@@ -19,6 +19,11 @@ import {
   Award,
   CreditCard,
   Sparkles,
+  ShoppingBag,
+  Coffee,
+  Clock,
+  TrendingUp,
+  Loader2,
 } from "lucide-react";
 import { getLocalDateString, getLocalPeriodString } from "../utils/dateUtils";
 import { addDaysToLocalDate } from "../utils/syncSanitizers";
@@ -42,6 +47,14 @@ import {
   exportKpiToPDF,
   exportKpiToCSV,
   exportMasterExecutiveReportPDF,
+  exportPurchaseOrdersToCSV,
+  exportPurchaseOrdersToPDF,
+  exportMenuCatalogToCSV,
+  exportMenuCatalogToPDF,
+  exportDailySalesRecapToCSV,
+  exportDailySalesRecapToPDF,
+  exportShiftsToCSV,
+  exportShiftsToPDF,
   exportToCSV,
   filterByDateRange,
   formatDateIndo,
@@ -54,6 +67,10 @@ import {
   exportAttendanceToXlsx,
   exportKpiToXlsx,
   exportMasterExecutiveReportXlsx,
+  exportPurchaseOrdersToXlsx,
+  exportMenuCatalogToXlsx,
+  exportDailySalesRecapToXlsx,
+  exportShiftsToXlsx,
 } from "../utils/exportXlsx";
 import { ImportFinanceModal } from "./ImportFinanceModal";
 import { CustomDatePicker } from "./common/CustomDatePicker";
@@ -61,11 +78,15 @@ import { CustomDatePicker } from "./common/CustomDatePicker";
 export type ExportModuleType =
   | "all_in_one"
   | "sales"
+  | "daily_recap"
   | "inventory"
+  | "purchases"
+  | "menu_catalog"
   | "finance"
   | "payroll"
   | "attendance"
-  | "kpi";
+  | "kpi"
+  | "shifts";
 
 interface ExportModalProps {
   isOpen: boolean;
@@ -104,6 +125,11 @@ export const ExportModal: React.FC<ExportModalProps> = ({
     employees,
     settings,
     expenseCategories,
+    purchaseOrders = [],
+    suppliers = [],
+    products = [],
+    dailySalesRecaps = [],
+    shifts = [],
   } = useStore();
   const isIndo = settings.language === "id";
 
@@ -113,6 +139,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   );
 
   const [isImportOpen, setIsImportOpen] = useState(false);
+  const [isExportingXlsx, setIsExportingXlsx] = useState(false);
   const [activeModule, setActiveModule] = useState<ExportModuleType>(
     defaultModule === "executive" ? "all_in_one" : (defaultModule as ExportModuleType) || "all_in_one"
   );
@@ -257,15 +284,39 @@ export const ExportModal: React.FC<ExportModalProps> = ({
     [filteredFinance]
   );
 
+  const filteredRecaps = useMemo(
+    () => filterByDateRange(dailySalesRecaps || [], startDate, endDate),
+    [dailySalesRecaps, startDate, endDate]
+  );
+
+  const filteredPurchases = useMemo(
+    () => filterByDateRange(purchaseOrders || [], startDate, endDate),
+    [purchaseOrders, startDate, endDate]
+  );
+
+  const filteredShifts = useMemo(() => {
+    return (shifts || []).filter((s) => {
+      const ymd = s.startTime ? getLocalDateString(new Date(s.startTime)) : "";
+      if (!ymd) return true;
+      if (startDate && ymd < startDate) return false;
+      if (endDate && ymd > endDate) return false;
+      return true;
+    });
+  }, [shifts, startDate, endDate]);
+
   if (!canAccessExport || typeof document === "undefined") return null;
 
   const isSelectedModuleEmpty = (): boolean => {
     if (activeModule === "sales") return filteredSales.length === 0;
+    if (activeModule === "daily_recap") return filteredRecaps.length === 0;
     if (activeModule === "inventory") return ingredients.length === 0 && filteredInventoryTrx.length === 0;
+    if (activeModule === "purchases") return filteredPurchases.length === 0;
+    if (activeModule === "menu_catalog") return products.length === 0;
     if (activeModule === "finance") return filteredFinance.length === 0;
     if (activeModule === "payroll") return filteredPayroll.length === 0;
     if (activeModule === "attendance") return filteredAttendance.length === 0;
     if (activeModule === "kpi") return filteredKpi.length === 0;
+    if (activeModule === "shifts") return filteredShifts.length === 0;
     return (
       filteredSales.length === 0 &&
       filteredFinance.length === 0 &&
@@ -296,6 +347,8 @@ export const ExportModal: React.FC<ExportModalProps> = ({
       });
     } else if (activeModule === "sales") {
       exportSalesToPDF({ sales: filteredSales, settings, periodLabel });
+    } else if (activeModule === "daily_recap") {
+      exportDailySalesRecapToPDF({ recaps: filteredRecaps, settings, periodLabel });
     } else if (activeModule === "inventory") {
       exportInventoryToPDF({
         ingredients,
@@ -303,6 +356,15 @@ export const ExportModal: React.FC<ExportModalProps> = ({
         settings,
         periodLabel,
       });
+    } else if (activeModule === "purchases") {
+      exportPurchaseOrdersToPDF({
+        purchaseOrders: filteredPurchases,
+        suppliers,
+        settings,
+        periodLabel,
+      });
+    } else if (activeModule === "menu_catalog") {
+      exportMenuCatalogToPDF({ products, settings, periodLabel });
     } else if (activeModule === "finance") {
       exportFinanceToPDF({ finance: filteredFinance, settings, periodLabel });
     } else if (activeModule === "payroll") {
@@ -326,6 +388,8 @@ export const ExportModal: React.FC<ExportModalProps> = ({
         settings,
         periodLabel,
       });
+    } else if (activeModule === "shifts") {
+      exportShiftsToPDF({ shifts: filteredShifts, settings, periodLabel });
     }
     toast.success("Berkas PDF berhasil dibuat.");
   };
@@ -362,12 +426,18 @@ export const ExportModal: React.FC<ExportModalProps> = ({
       exportToCSV(`Ringkasan_Eksekutif_${periodLabel.replace(/\s+/g, "_")}`, summaryRows);
     } else if (activeModule === "sales") {
       exportSalesToCSV({ sales: filteredSales, settings });
+    } else if (activeModule === "daily_recap") {
+      exportDailySalesRecapToCSV({ recaps: filteredRecaps });
     } else if (activeModule === "inventory") {
       exportInventoryToCSV({
         ingredients,
         movements: filteredInventoryTrx,
         settings,
       });
+    } else if (activeModule === "purchases") {
+      exportPurchaseOrdersToCSV({ purchaseOrders: filteredPurchases, suppliers });
+    } else if (activeModule === "menu_catalog") {
+      exportMenuCatalogToCSV({ products });
     } else if (activeModule === "finance") {
       exportFinanceToCSV({ finance: filteredFinance, settings });
     } else if (activeModule === "payroll") {
@@ -376,68 +446,91 @@ export const ExportModal: React.FC<ExportModalProps> = ({
       exportAttendanceToCSV({ attendances: filteredAttendance, employees });
     } else if (activeModule === "kpi") {
       exportKpiToCSV({ kpiRecords: filteredKpi, employees });
+    } else if (activeModule === "shifts") {
+      exportShiftsToCSV({ shifts: filteredShifts });
     }
     toast.success("Berkas CSV berhasil diunduh.");
   };
 
-  const handleExportXlsx = () => {
+  const handleExportXlsx = async () => {
     if (isSelectedModuleEmpty()) {
       toast.warning("Tidak ada data pada periode terpilih untuk diekspor ke Excel.");
       return;
     }
-    if (activeModule === "all_in_one") {
-      exportMasterExecutiveReportXlsx({
-        sales: filteredSales,
-        finance: filteredFinance,
-        ingredients,
-        movements: filteredInventoryTrx,
-        payroll: filteredPayroll,
-        attendances: filteredAttendance,
-        kpiRecords: filteredKpi,
-        employees,
-        settings,
-        periodLabel,
-        expenseCategories,
-      });
-    } else if (activeModule === "sales") {
-      exportSalesToXlsx({ sales: filteredSales, settings, periodLabel });
-    } else if (activeModule === "inventory") {
-      exportInventoryToXlsx({
-        ingredients,
-        movements: filteredInventoryTrx,
-        settings,
-        periodLabel,
-      });
-    } else if (activeModule === "finance") {
-      exportFinanceToXlsx({
-        finance: filteredFinance,
-        settings,
-        periodLabel,
-        expenseCategories,
-      });
-    } else if (activeModule === "payroll") {
-      exportPayrollToXlsx({
-        payroll: filteredPayroll,
-        employees,
-        settings,
-        periodLabel,
-      });
-    } else if (activeModule === "attendance") {
-      exportAttendanceToXlsx({
-        attendances: filteredAttendance,
-        employees,
-        settings,
-        periodLabel,
-      });
-    } else if (activeModule === "kpi") {
-      exportKpiToXlsx({
-        kpiRecords: filteredKpi,
-        employees,
-        settings,
-        periodLabel,
-      });
+    setIsExportingXlsx(true);
+    try {
+      if (activeModule === "all_in_one") {
+        await exportMasterExecutiveReportXlsx({
+          sales: filteredSales,
+          finance: filteredFinance,
+          ingredients,
+          movements: filteredInventoryTrx,
+          payroll: filteredPayroll,
+          attendances: filteredAttendance,
+          kpiRecords: filteredKpi,
+          employees,
+          settings,
+          periodLabel,
+          expenseCategories,
+        });
+      } else if (activeModule === "sales") {
+        await exportSalesToXlsx({ sales: filteredSales, settings, periodLabel });
+      } else if (activeModule === "daily_recap") {
+        await exportDailySalesRecapToXlsx({ recaps: filteredRecaps, settings, periodLabel });
+      } else if (activeModule === "inventory") {
+        await exportInventoryToXlsx({
+          ingredients,
+          movements: filteredInventoryTrx,
+          settings,
+          periodLabel,
+        });
+      } else if (activeModule === "purchases") {
+        await exportPurchaseOrdersToXlsx({
+          purchaseOrders: filteredPurchases,
+          suppliers,
+          ingredients,
+          settings,
+          periodLabel,
+        });
+      } else if (activeModule === "menu_catalog") {
+        await exportMenuCatalogToXlsx({ products, settings, periodLabel });
+      } else if (activeModule === "finance") {
+        await exportFinanceToXlsx({
+          finance: filteredFinance,
+          settings,
+          periodLabel,
+          expenseCategories,
+        });
+      } else if (activeModule === "payroll") {
+        await exportPayrollToXlsx({
+          payroll: filteredPayroll,
+          employees,
+          settings,
+          periodLabel,
+        });
+      } else if (activeModule === "attendance") {
+        await exportAttendanceToXlsx({
+          attendances: filteredAttendance,
+          employees,
+          settings,
+          periodLabel,
+        });
+      } else if (activeModule === "kpi") {
+        await exportKpiToXlsx({
+          kpiRecords: filteredKpi,
+          employees,
+          settings,
+          periodLabel,
+        });
+      } else if (activeModule === "shifts") {
+        await exportShiftsToXlsx({ shifts: filteredShifts, settings, periodLabel });
+      }
+      toast.success("Berkas Excel (.xlsx) berhasil diunduh.");
+    } catch (err: any) {
+      toast.error("Gagal membuat berkas Excel: " + (err?.message || err));
+    } finally {
+      setIsExportingXlsx(false);
     }
-    toast.success("Berkas Excel (.xlsx) berhasil diunduh.");
   };
 
   return (
@@ -558,14 +651,18 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                       <div className="h-px bg-slate-200 dark:bg-slate-800 flex-1" />
                     </div>
 
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
                       {[
-                        { id: "sales", icon: ReceiptText, title: "Penjualan (Sales)", countText: `${filteredSales.length} transaksi kasir` },
+                        { id: "sales", icon: ReceiptText, title: "Penjualan Produk", countText: `${filteredSales.length} transaksi` },
+                        { id: "daily_recap", icon: TrendingUp, title: "Rekap Omzet Harian", countText: `${filteredRecaps.length} entri rekap` },
                         { id: "inventory", icon: Warehouse, title: "Inventaris & Stok", countText: `${filteredInventoryTrx.length} mutasi bahan` },
-                        { id: "finance", icon: Wallet, title: "Arus Kas & Buku Besar", countText: `${filteredFinance.length} catatan kas` },
+                        { id: "purchases", icon: ShoppingBag, title: "Pembelian (PO)", countText: `${filteredPurchases.length} faktur PO` },
+                        { id: "menu_catalog", icon: Coffee, title: "Katalog Menu & HPP", countText: `${products.length} produk` },
+                        { id: "finance", icon: Wallet, title: "Arus Kas & Buku", countText: `${filteredFinance.length} catatan kas` },
                         { id: "payroll", icon: CreditCard, title: "Gaji & Bonus KPI", countText: `${filteredPayroll.length} slip terbit` },
-                        { id: "attendance", icon: UserCheck, title: "Absensi & Jam Kerja", countText: `${filteredAttendance.length} catatan hadir` },
-                        { id: "kpi", icon: Award, title: "Capaian KPI & Skor", countText: `${filteredKpi.length} evaluasi karyawan` },
+                        { id: "attendance", icon: UserCheck, title: "Absensi & Jam", countText: `${filteredAttendance.length} presensi` },
+                        { id: "kpi", icon: Award, title: "Capaian KPI", countText: `${filteredKpi.length} evaluasi` },
+                        { id: "shifts", icon: Clock, title: "Shift Kasir", countText: `${filteredShifts.length} sesi shift` },
                       ].map((mod) => {
                         const IconMod = mod.icon;
                         const active = activeModule === mod.id;
@@ -759,6 +856,34 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                           pada periode terpilih.
                         </span>
                       )}
+                      {activeModule === "daily_recap" && (
+                        <span>
+                          Ditemukan <strong>{filteredRecaps.length} entri rekap omzet harian</strong> dengan total penerimaan{" "}
+                          <strong className="tabular-nums">
+                            {formatCurrency(filteredRecaps.reduce((s, r) => s + (r.totalAmount || 0), 0))}
+                          </strong>
+                          .
+                        </span>
+                      )}
+                      {activeModule === "purchases" && (
+                        <span>
+                          Ditemukan <strong>{filteredPurchases.length} Purchase Order</strong> dengan total nilai{" "}
+                          <strong className="tabular-nums">
+                            {formatCurrency(filteredPurchases.reduce((s, p) => s + (p.totalAmount || 0), 0))}
+                          </strong>
+                          .
+                        </span>
+                      )}
+                      {activeModule === "menu_catalog" && (
+                        <span>
+                          Terdapat <strong>{products.length} produk resmi</strong> di katalog siap diekspor lengkap dengan rincian varian, harga jual, &amp; estimasi HPP.
+                        </span>
+                      )}
+                      {activeModule === "shifts" && (
+                        <span>
+                          Ditemukan <strong>{filteredShifts.length} riwayat sesi shift kasir</strong> pada periode terpilih.
+                        </span>
+                      )}
                       {activeModule === "inventory" && (
                         <span>
                           Ditemukan <strong>{filteredInventoryTrx.length} mutasi keluar/masuk</strong> bahan baku dan{" "}
@@ -857,9 +982,14 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                     <button
                       type="button"
                       onClick={handleExportXlsx}
-                      className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer"
+                      disabled={isExportingXlsx}
+                      className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer"
                     >
-                      <FileSpreadsheet className="w-3.5 h-3.5" />
+                      {isExportingXlsx ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <FileSpreadsheet className="w-3.5 h-3.5" />
+                      )}
                       {activeModule === "all_in_one" ? "👑 Unduh Master Excel (7 Sheet)" : "Unduh Excel (.xlsx)"}
                     </button>
                     <button

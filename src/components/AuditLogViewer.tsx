@@ -13,9 +13,12 @@ import {
   Filter,
   X,
   Layers,
+  Download,
 } from "lucide-react";
 import { motion } from "motion/react";
-import { getLocalDateString } from "../utils/dateUtils";
+import { DEFAULT_STORE_TIMEZONE, getLocalDateString } from "../utils/dateUtils";
+import { toast } from "../context/ToastContext";
+import { buildStyledWorkbook } from "../utils/excelTemplate";
 import { CustomDatePicker } from "./common/CustomDatePicker";
 import { CustomMonthPicker } from "./common/CustomMonthPicker";
 import { CustomSelect } from "./common/CustomSelect";
@@ -223,6 +226,52 @@ export const AuditLogViewer = () => {
     selectedAction !== "ALL" ||
     searchTerm !== "";
 
+  const handleExportAuditLogs = async () => {
+    if (filteredLogs.length === 0) {
+      toast.warning("Tidak ada audit log pada filter saat ini untuk diekspor.");
+      return;
+    }
+    try {
+      await buildStyledWorkbook({
+        filename: `Audit_Log_Aktivitas_${getLocalDateString()}`,
+        sheets: [
+          {
+            name: "Audit Log",
+            title: "Log Aktivitas Teknis & Manajerial",
+            subtitle: `Periode: ${activePeriodLabel} • Total ${filteredLogs.length} log`,
+            headers: [
+              "Waktu (WITA)",
+              "Pengguna",
+              "Username",
+              "Role",
+              "Aksi",
+              "Modul / Tabel",
+              "ID Record",
+            ],
+            rows: filteredLogs.map((log) => {
+              const user = users.find((u) => u.id === log.userId);
+              return [
+                new Date(log.timestamp).toLocaleString("id-ID", {
+                  timeZone: DEFAULT_STORE_TIMEZONE,
+                }),
+                user?.name || "System",
+                user?.username || "-",
+                user?.role || "-",
+                log.action,
+                TABLE_LABELS[log.tableName] || log.tableName,
+                log.recordId,
+              ];
+            }),
+            columnFormats: ["text", "text", "text", "text", "text", "text", "text"],
+          },
+        ],
+      });
+      toast.success(`Berhasil mengekspor ${filteredLogs.length} log aktivitas ke Excel (.xlsx).`);
+    } catch (err: any) {
+      toast.error("Gagal mengekspor audit log: " + (err?.message || err));
+    }
+  };
+
   return (
     <div className="space-y-5">
       {/* Header */}
@@ -241,10 +290,20 @@ export const AuditLogViewer = () => {
           </div>
         </div>
 
-        {/* Periode Saat Ini Badge */}
-        <div className="flex items-center gap-2 self-start sm:self-auto px-3.5 py-1.5 rounded-xl bg-white border border-slate-200 shadow-2xs text-xs font-semibold text-slate-700">
-          <CalendarDays className="w-4 h-4 text-brand-600 shrink-0" />
-          <span>Periode: <strong className="text-slate-900">{activePeriodLabel}</strong></span>
+        {/* Periode Saat Ini Badge & Export */}
+        <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+          <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white border border-slate-200 shadow-2xs text-xs font-semibold text-slate-700">
+            <CalendarDays className="w-4 h-4 text-brand-600 shrink-0" />
+            <span>Periode: <strong className="text-slate-900">{activePeriodLabel}</strong></span>
+          </div>
+          <button
+            type="button"
+            onClick={handleExportAuditLogs}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs transition cursor-pointer"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>Ekspor Excel (.xlsx)</span>
+          </button>
         </div>
       </div>
 

@@ -59,7 +59,11 @@ export function resolveOrderItemIngredients(
   allProducts: any[] = [],
   allIngredients: any[] = []
 ): ResolvedIngredientUsage[] {
-  const itemQty = Math.max(0, Number(item.quantity) || 1);
+  const rawQty =
+    item.quantity === undefined || item.quantity === null
+      ? 1
+      : Number(item.quantity);
+  const itemQty = Number.isFinite(rawQty) ? Math.max(0, rawQty) : 0;
   if (itemQty <= 0) return [];
 
   const menuLower = String(item.menuName || "").trim().toLowerCase();
@@ -1577,5 +1581,32 @@ export function parseSmartCoffeeTextEntry(text: string, storeContext?: any) {
         : "Belum ada nominal transaksi yang terbaca dari catatan tersebut.",
     transactions,
     source: "local-nlp" as const,
+  };
+}
+
+/** Hitung subtotal, pajak PB1, dan total akhir pecahan Split Bill per item selaras dengan server. */
+export function computeSplitItemsTotals(
+  itemsSubtotal: number,
+  taxPercent: number = 0,
+  taxMode: string = "EXCLUSIVE"
+): { subtotal: number; taxAmount: number; totalAmount: number; taxMode: "EXCLUSIVE" | "INCLUSIVE" } {
+  const cleanSubtotal = Math.max(0, Math.round(Number(itemsSubtotal) || 0));
+  const rate = Math.max(0, Number(taxPercent) || 0);
+  const normalizedMode: "EXCLUSIVE" | "INCLUSIVE" =
+    String(taxMode || "EXCLUSIVE").toUpperCase() === "INCLUSIVE" ? "INCLUSIVE" : "EXCLUSIVE";
+
+  let taxAmount = 0;
+  if (rate > 0 && cleanSubtotal > 0) {
+    taxAmount =
+      normalizedMode === "INCLUSIVE"
+        ? Math.round((cleanSubtotal * rate) / (100 + rate))
+        : Math.round((cleanSubtotal * rate) / 100);
+  }
+  const totalAmount = normalizedMode === "EXCLUSIVE" ? cleanSubtotal + taxAmount : cleanSubtotal;
+  return {
+    subtotal: cleanSubtotal,
+    taxAmount,
+    totalAmount,
+    taxMode: normalizedMode,
   };
 }

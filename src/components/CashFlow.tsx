@@ -1540,10 +1540,10 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
   };
 
   const handleImport = (parsedData: any[]) => {
-    if (isReadOnly) return;
+    if (isReadOnly) return { added: 0, updated: 0, skipped: parsedData.length };
     if (cashAccounts.length === 0) {
       toast.warning("Silakan buat Pos Kas terlebih dahulu sebelum mengimpor transaksi.");
-      return;
+      return { added: 0, updated: 0, skipped: parsedData.length };
     }
 
     let addedCount = 0;
@@ -1654,6 +1654,7 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
       `Impor selesai. Ditambahkan: ${addedCount} baru, Diperbarui: ${updatedCount}, Dilewati: ${errors} baris.`,
       5500
     );
+    return { added: addedCount, updated: updatedCount, skipped: errors };
   };
 
   const getAccountIcon = (type: string) => {
@@ -2254,79 +2255,106 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
 
               {/* Action Buttons (Excel, Verifikasi, Kategori) */}
               <div className="flex flex-wrap items-center gap-2">
+                {cashAccounts.length > 0 && (
+                  <CsvImportExport
+                    onImport={handleImport}
+                    canImport={!isReadOnly}
+                    requiredHeaders={["Tanggal", "Jenis", "Jumlah"]}
+                    exportFilename={`Buku_Kas_${getLocalDateString()}`}
+                    exportTitle="Laporan Transaksi Buku Kas"
+                    templateHeaders={[
+                      "Tanggal",
+                      "Pos Kas",
+                      "Jenis",
+                      "Kategori",
+                      "Deskripsi",
+                      "Toko / Vendor",
+                      "No. Nota / Ref",
+                      "Qty",
+                      "Satuan",
+                      "Harga Satuan",
+                      "Jumlah",
+                    ]}
+                    templateExampleRow={[
+                      getLocalDateString(),
+                      cashAccounts[0]?.name || "Kas Utama",
+                      "Pengeluaran",
+                      expenseCategories[0]?.name || "Bahan Baku",
+                      "Beli Susu Fresh Milk Diamond",
+                      "Indogrosir",
+                      "INV-001",
+                      "5",
+                      "liter",
+                      "22000",
+                      "110000",
+                    ]}
+                    templateFilename="Template_Buku_Kas_Julia.xlsx"
+                    buttonLabel={isReadOnly ? "Ekspor Data" : "Impor / Ekspor"}
+                    currentData={filteredTransactions.map((trx) => {
+                      const firstItem = trx.items?.[0];
+                      return {
+                        id: trx.id,
+                        Tanggal: getLocalDateString(new Date(trx.date)),
+                        "Pos Kas":
+                          cashAccounts.find((a) => a.id === trx.accountId)?.name || "-",
+                        Jenis:
+                          getNormalizedType(trx.type) === "CASH_IN"
+                            ? "Pemasukan"
+                            : "Pengeluaran",
+                        Kategori: trx.category,
+                        Deskripsi: trx.description,
+                        "Toko / Vendor": trx.vendorName || "-",
+                        "No. Nota / Ref": trx.receiptNo || "-",
+                        Qty: firstItem ? firstItem.qty : 1,
+                        Satuan: firstItem ? firstItem.unit : "pcs",
+                        "Harga Satuan": firstItem ? firstItem.unitPrice : trx.amount,
+                        Jumlah: trx.amount,
+                        "Saldo Berjalan": runningBalanceByTrxId[trx.id] ?? 0,
+                      };
+                    })}
+                    exportHeaders={[
+                      "Tanggal",
+                      "Pos Kas",
+                      "Jenis",
+                      "Kategori",
+                      "Deskripsi",
+                      "Toko / Vendor",
+                      "No. Nota / Ref",
+                      "Qty",
+                      "Satuan",
+                      "Harga Satuan",
+                      "Jumlah",
+                      "Saldo Berjalan",
+                    ]}
+                    templateDropdowns={{
+                      "Pos Kas": cashAccounts.map((a) => a.name),
+                      Jenis: ["Pemasukan", "Pengeluaran"],
+                      Kategori: expenseCategories.map((c: any) => c.name),
+                    }}
+                    templateColumnTypes={{
+                      Tanggal: "date",
+                      Qty: "number",
+                      "Harga Satuan": "number",
+                      Jumlah: "number",
+                    }}
+                    templateFormats={{
+                      Tanggal: "date",
+                      "No. Nota / Ref": "text",
+                      Qty: "number",
+                      "Harga Satuan": "currency",
+                      Jumlah: "currency",
+                      "Saldo Berjalan": "currency",
+                    }}
+                    templateHints={{
+                      Tanggal: "Format: YYYY-MM-DD",
+                      Qty: "Jumlah barang (opsional)",
+                      "Harga Satuan": "Harga per item (opsional)",
+                      Jumlah: "Total nominal (angka saja)",
+                    }}
+                  />
+                )}
                 {!isReadOnly && cashAccounts.length > 0 && (
                   <>
-                    <CsvImportExport
-                      onImport={handleImport}
-                      templateHeaders={[
-                        "Tanggal",
-                        "Pos Kas",
-                        "Jenis",
-                        "Kategori",
-                        "Deskripsi",
-                        "Toko / Vendor",
-                        "No. Nota / Ref",
-                        "Qty",
-                        "Satuan",
-                        "Harga Satuan",
-                        "Jumlah",
-                      ]}
-                      templateExampleRow={[
-                        getLocalDateString(),
-                        cashAccounts[0]?.name || "Kas Utama",
-                        "Pengeluaran",
-                        "Bahan Baku",
-                        "Beli Susu Fresh Milk Diamond",
-                        "Indogrosir",
-                        "INV-001",
-                        "5",
-                        "liter",
-                        "22000",
-                        "110000",
-                      ]}
-                      templateFilename="Template_Buku_Kas_Julia.xlsx"
-                      buttonLabel="Impor / Ekspor Excel"
-                      currentData={filteredTransactions.map((trx) => {
-                        const firstItem = trx.items?.[0];
-                        return {
-                          id: trx.id,
-                          Tanggal: getLocalDateString(new Date(trx.date)),
-                          "Pos Kas":
-                            cashAccounts.find((a) => a.id === trx.accountId)?.name || "-",
-                          Jenis:
-                            getNormalizedType(trx.type) === "CASH_IN"
-                              ? "Pemasukan"
-                              : "Pengeluaran",
-                          Kategori: trx.category,
-                          Deskripsi: trx.description,
-                          "Toko / Vendor": trx.vendorName || "-",
-                          "No. Nota / Ref": trx.receiptNo || "-",
-                          Qty: firstItem ? firstItem.qty : 1,
-                          Satuan: firstItem ? firstItem.unit : "pcs",
-                          "Harga Satuan": firstItem ? firstItem.unitPrice : trx.amount,
-                          Jumlah: trx.amount,
-                          "Saldo Berjalan": runningBalanceByTrxId[trx.id] ?? 0,
-                        };
-                      })}
-                      templateDropdowns={{
-                        "Pos Kas": cashAccounts.map((a) => a.name),
-                        Jenis: ["Pemasukan", "Pengeluaran"],
-                        Kategori: expenseCategories.map((c: any) => c.name),
-                      }}
-                      templateColumnTypes={{
-                        Tanggal: "date",
-                        Qty: "number",
-                        "Harga Satuan": "number",
-                        Jumlah: "number",
-                      }}
-                      templateHints={{
-                        Tanggal: "Format: YYYY-MM-DD",
-                        Qty: "Jumlah barang (opsional)",
-                        "Harga Satuan": "Harga per item (opsional)",
-                        Jumlah: "Total nominal (angka saja)",
-                      }}
-                    />
-
                     {unverifiedSalesLogs.length > 0 && (
                       <button
                         type="button"

@@ -3,6 +3,7 @@ import { toast } from "../../context/ToastContext";
 import { DEFAULT_STORE_TIMEZONE } from "../../utils/dateUtils";
 import { authFetch } from "../../utils/authHeaders";
 import { formatCurrency } from "../../utils/format";
+import { computeSplitItemsTotals } from "../../utils/posDomainLogic";
 import {
   Users,
   Search,
@@ -88,6 +89,18 @@ export const PosOpenBillsModal: React.FC<PosOpenBillsModalProps> = ({
   const handleConfirmVoid = async (manager: any, reason: string) => {
     if (!selectedVoidOrder) return;
     try {
+      if (manager?.isRemoteApproved) {
+        toast.success(
+          `Order #${selectedVoidOrder.receiptNo} berhasil dibatalkan melalui persetujuan jarak jauh (${manager.name}).`
+        );
+        setSelectedVoidOrder(null);
+        setShowPinModal(false);
+        setVoidReason("");
+        fetchActiveOrders();
+        onOrderVoided();
+        return;
+      }
+
       const res = await authFetch(`/api/pos/orders/${selectedVoidOrder.id}/void`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -785,10 +798,14 @@ export const PosOpenBillsModal: React.FC<PosOpenBillsModalProps> = ({
                 <p className="text-base font-black text-brand-700">
                   {splitMode === "ITEMS"
                     ? formatCurrency(
-                        (selectedSplitOrder.items || []).reduce((sum: number, it: any) => {
-                          const qty = splitItemQuantities[it.id] || 0;
-                          return sum + (it.unitPrice || 0) * qty;
-                        }, 0)
+                        computeSplitItemsTotals(
+                          (selectedSplitOrder.items || []).reduce((sum: number, it: any) => {
+                            const qty = splitItemQuantities[it.id] || 0;
+                            return sum + (it.unitPrice || 0) * qty;
+                          }, 0),
+                          Number(selectedSplitOrder.taxPercent) || 0,
+                          selectedSplitOrder.taxMode || "EXCLUSIVE"
+                        ).totalAmount
                       )
                     : formatCurrency(Math.round(selectedSplitOrder.totalAmount / splitPersonsCount))}
                 </p>
@@ -817,7 +834,13 @@ export const PosOpenBillsModal: React.FC<PosOpenBillsModalProps> = ({
                         return;
                       }
 
-                      const splitSubtotal = selectedItemsToPay.reduce((s: number, i: any) => s + i.subtotal, 0);
+                      const rawSubtotal = selectedItemsToPay.reduce((s: number, i: any) => s + i.subtotal, 0);
+                      const taxRate = Number(selectedSplitOrder.taxPercent) || 0;
+                      const calc = computeSplitItemsTotals(
+                        rawSubtotal,
+                        taxRate,
+                        selectedSplitOrder.taxMode || "EXCLUSIVE"
+                      );
                       const splitOrder = {
                         ...selectedSplitOrder,
                         isSplitBill: true,
@@ -826,8 +849,11 @@ export const PosOpenBillsModal: React.FC<PosOpenBillsModalProps> = ({
                         splitItems: selectedItemsToPay,
                         customerName: `${selectedSplitOrder.customerName || "Tamu"} (Split)`,
                         items: selectedItemsToPay,
-                        totalAmount: splitSubtotal,
-                        subtotal: splitSubtotal,
+                        totalAmount: calc.totalAmount,
+                        subtotal: calc.subtotal,
+                        taxAmount: calc.taxAmount,
+                        taxPercent: taxRate,
+                        taxMode: calc.taxMode,
                       };
 
                       onSelectOrder(splitOrder);

@@ -141,7 +141,13 @@ export const PosManagerPinModal: React.FC<PosManagerPinModalProps> = ({
             setTimeout(() => {
               if (isMounted) {
                 onSuccess(
-                  { id: "remote_manager", name: data.respondedBy || "Manager", role: "MANAGER" },
+                  {
+                    id: "remote_manager",
+                    name: data.respondedBy || "Manager",
+                    role: "MANAGER",
+                    isRemoteApproved: true,
+                    remoteApprovalRequestId: remoteRequestId,
+                  },
                   reasonRef.current.trim()
                 );
               }
@@ -187,7 +193,7 @@ export const PosManagerPinModal: React.FC<PosManagerPinModalProps> = ({
         setPin("");
         return;
       }
-      onSuccess(data.approver, reasonRef.current.trim());
+      onSuccess({ ...data.approver, pin: currentPin }, reasonRef.current.trim());
     } catch {
       // Offline fallback
       const supervisorPin = settings?.posSupervisorPin || "1234";

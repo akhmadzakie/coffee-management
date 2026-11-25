@@ -42,6 +42,7 @@ import {
   getPackagingSelectValue,
   resolveIngredientPackagingFromText,
   parseSmartCoffeeTextEntry,
+  computeSplitItemsTotals,
 } from "../src/utils/posDomainLogic";
 import {
   getPreviousPeriodString,
@@ -163,7 +164,21 @@ import {
   exportSinglePayslipPDF,
   filterByDateRange,
   formatDateIndo,
+  formatStockMovementTypeLabel,
 } from "../src/utils/export";
+import {
+  normalizeTextCode,
+  parseLocalizedNumber,
+  parseFlexibleDateYmd,
+  matchAndNormalizeImportRows,
+} from "../src/utils/genericImport";
+import {
+  buildMenuImportPlan,
+  parseOpnamePhysicalSheetRows,
+  parseDailySalesRecapImportRows,
+  groupImportedPurchaseOrders,
+  buildRecipeImportPlan,
+} from "../src/utils/importHelpers";
 import {
   AttendanceRecord,
   Budget,
@@ -182,6 +197,7 @@ import {
   PurchaseOrder,
   SalesTransaction,
   StockMovement,
+  Supplier,
   User,
 } from "../src/types";
 import {
@@ -6262,6 +6278,358 @@ test("47c. Akun yang menjadi tujuan default paymentAccountMapping dilarang dihap
   // Sync guard juga melindungi akun yang masih terdaftar di paymentAccountMapping
   const synced = protectCashAccountsOnSync([mainCash, primaryBank], accounts, [], [], mapping);
   assert.ok(synced.some((a) => a.id === "ewallet-qris"));
+});
+
+// -------------------------------------------------------------
+// TEST SUITE 48: EXPORT, IMPORT & TEMPLATE ENGINE HELPERS
+// -------------------------------------------------------------
+console.log("\n[Suite 48] Export, Import & Template Engine Helpers...");
+
+test("48a. normalizeTextCode, parseLocalizedNumber, dan parseFlexibleDateYmd menangani variasi format Excel", () => {
+  // Preserve leading zeroes & strip trailing .0 from numeric Excel exports
+  assert.strictEqual(normalizeTextCode("08123456789"), "08123456789");
+  assert.strictEqual(normalizeTextCode("12345.0"), "12345");
+  assert.strictEqual(normalizeTextCode(12345), "12345");
+  assert.strictEqual(normalizeTextCode("  SKU-001  "), "SKU-001");
+
+  // Localized Rupiah / Indonesian & US numbers
+  assert.strictEqual(parseLocalizedNumber("Rp 1.250.000"), 1250000);
+  assert.strictEqual(parseLocalizedNumber("1.234,5"), 1234.5);
+  assert.strictEqual(parseLocalizedNumber("1,234.75"), 1234.75);
+  assert.strictEqual(parseLocalizedNumber("(25.000)"), -25000);
+
+  // Flexible date parsing (ISO, DD/MM/YYYY, Excel serial date)
+  assert.strictEqual(parseFlexibleDateYmd("2026-05-14"), "2026-05-14");
+  assert.strictEqual(parseFlexibleDateYmd("14/05/2026"), "2026-05-14");
+  assert.strictEqual(parseFlexibleDateYmd(46156), "2026-05-14");
+  assert.strictEqual(parseFlexibleDateYmd("not-a-date"), null);
+});
+
+test("48b. matchAndNormalizeImportRows mencocokkan alias header, cek kolom wajib, dan deteksi baris contoh", () => {
+  const result = matchAndNormalizeImportRows(
+    [
+      {
+        "nama menu": "Kopi Susu Gula Aren",
+        div: "BAR",
+        harga: "25.000",
+      },
+      {
+        "nama menu": "Matcha Latte",
+        div: "BAR",
+        harga: "28.000",
+      },
+    ],
+    {
+      expectedHeaders: ["Nama Menu", "Divisi", "Harga Jual"],
+      requiredHeaders: ["Nama Menu", "Harga Jual"],
+      headerAliases: {
+        "Nama Menu": ["nama menu", "menu"],
+        Divisi: ["div", "division"],
+        "Harga Jual": ["harga", "price"],
+      },
+      exampleRowValues: ["Kopi Susu Gula Aren", "BAR", "25000"],
+    }
+  );
+
+  assert.strictEqual(result.missingRequiredHeaders.length, 0);
+  assert.strictEqual(result.exampleRowDetected, true);
+  assert.strictEqual(result.rows.length, 2);
+  assert.strictEqual(result.rows[1]["Nama Menu"], "Matcha Latte");
+  assert.strictEqual(result.rows[1]["Divisi"], "BAR");
+
+  const missingReq = matchAndNormalizeImportRows(
+    [{ "Nama Menu": "Test" }],
+    {
+      expectedHeaders: ["Nama Menu", "Harga Jual"],
+      requiredHeaders: ["Nama Menu", "Harga Jual"],
+    }
+  );
+  assert.deepStrictEqual(missingReq.missingRequiredHeaders, ["Harga Jual"]);
+  assert.ok(missingReq.warnings.some((w) => w.includes("Kolom wajib")));
+});
+
+test("48c. buildMenuImportPlan mengelompokkan multi-varian & update by productId::variantId", () => {
+  const existing: Product[] = [
+    {
+      id: "prod-1",
+      name: "Americano",
+      category: "Coffee",
+      productGroup: "COFFEE",
+      division: "BAR",
+      isActive: true,
+      variants: [
+        {
+          id: "var-hot",
+          productId: "prod-1",
+          name: "Hot",
+          price: 18000,
+          packagingCost: 1000,
+          isAvailable: true,
+        },
+      ],
+      createdAt: "2026-01-01T00:00:00Z",
+      updatedAt: "2026-01-01T00:00:00Z",
+    },
+  ];
+
+  const plan = buildMenuImportPlan(
+    [
+      // Update varian existing lewat ID_SISTEM
+      {
+        "ID_SISTEM (JANGAN DIUBAH)": "prod-1::var-hot",
+        "Nama Menu": "Americano",
+        Divisi: "BAR",
+        "Kategori Menu": "Coffee",
+        "Nama Varian": "Hot",
+        "Harga Jual": 20000,
+        "Biaya Kemasan": 1200,
+      },
+      // Produk baru dengan 2 varian
+      {
+        "Nama Menu": "Butter Croissant",
+        Divisi: "BAKER",
+        "Kategori Menu": "Pastry",
+        "Nama Varian": "Original",
+        "Harga Jual": 26000,
+      },
+      {
+        "Nama Menu": "Butter Croissant",
+        Divisi: "BAKER",
+        "Kategori Menu": "Pastry",
+        "Nama Varian": "Almond",
+        "Harga Jual": 32000,
+      },
+      // Baris tanpa nama -> skipped
+      {
+        "Nama Menu": "",
+        "Harga Jual": 10000,
+      },
+    ],
+    existing,
+    "2026-05-01T00:00:00Z"
+  );
+
+  assert.strictEqual(plan.updatedVariants, 1);
+  assert.strictEqual(plan.productsToUpdate.length, 1);
+  assert.strictEqual(plan.productsToUpdate[0].variants[0].price, 20000);
+  assert.strictEqual(plan.productsToCreate.length, 1);
+  assert.strictEqual(plan.productsToCreate[0].variants.length, 2);
+  assert.strictEqual(plan.addedVariants, 2);
+  assert.strictEqual(plan.skipped, 1);
+});
+
+test("48d. parseOpnamePhysicalSheetRows, groupImportedPurchaseOrders, buildRecipeImportPlan, dan parseDailySalesRecapImportRows", () => {
+  const ingredients: Ingredient[] = [
+    {
+      id: "ing-bean",
+      code: "BHN-01",
+      name: "Espresso Bean",
+      category: "Kopi",
+      unit: "gr",
+      currentStock: 1000,
+      minStock: 200,
+      costPerUnit: 250,
+    },
+    {
+      id: "ing-milk",
+      code: "BHN-02",
+      name: "Fresh Milk",
+      category: "Dairy",
+      unit: "ml",
+      currentStock: 2000,
+      minStock: 500,
+      costPerUnit: 20,
+    },
+  ];
+
+  // Opname: baris kosong tidak menimpa jadi 0; baris terisi menghitung selisih
+  const opnameRes = parseOpnamePhysicalSheetRows(
+    [
+      { "ID_SISTEM (JANGAN DIUBAH)": "ing-bean", "Stok Fisik": "850", Catatan: "Susut giling" },
+      { "ID_SISTEM (JANGAN DIUBAH)": "ing-milk", "Stok Fisik": "" },
+    ],
+    ingredients
+  );
+  assert.strictEqual(opnameRes.updates.length, 1);
+  assert.strictEqual(opnameRes.updates[0].difference, -150);
+  assert.strictEqual(opnameRes.skipped, 1);
+
+  // Grouping PO import: skip closed period & duplicate PO
+  const suppliers: Supplier[] = [
+    { id: "sup-1", name: "PT Kopi Nusantara", contact: "08111", picName: "Budi", address: "Jakarta", notes: "" },
+  ];
+  const poPlan = groupImportedPurchaseOrders(
+    [
+      { "No. PO": "PO-001", Tanggal: "2026-05-10", Supplier: "PT Kopi Nusantara", "Nama Bahan": "Espresso Bean", "Jumlah Beli": 2, "Harga Satuan": 200000 },
+      { "No. PO": "PO-001", Tanggal: "2026-05-10", Supplier: "PT Kopi Nusantara", "Nama Bahan": "Fresh Milk", "Jumlah Beli": 5, "Harga Satuan": 18000 },
+      { "No. PO": "PO-OLD", Tanggal: "2026-04-05", Supplier: "PT Kopi Nusantara", "Nama Bahan": "Fresh Milk", "Jumlah Beli": 1, "Harga Satuan": 18000 },
+      { "No. PO": "PO-DUP", Tanggal: "2026-05-11", Supplier: "PT Kopi Nusantara", "Nama Bahan": "Fresh Milk", "Jumlah Beli": 1, "Harga Satuan": 18000 },
+    ],
+    suppliers,
+    ingredients,
+    {
+      existingPurchaseOrders: [{ id: "po-x", poNumber: "PO-DUP" } as PurchaseOrder],
+      closedPeriods: [{ period: "2026-04" }],
+    }
+  );
+  assert.strictEqual(poPlan.ordersToCreate.length, 1);
+  assert.strictEqual(poPlan.ordersToCreate[0].items.length, 2);
+  assert.strictEqual(poPlan.ordersToCreate[0].totalAmount, 490000);
+  assert.strictEqual(poPlan.ordersToCreate[0].items[0].productId, "ing-bean");
+  assert.strictEqual(poPlan.closedSkipped, 1);
+  assert.strictEqual(poPlan.duplicatePoCount, 1);
+
+  // Recipe import merge duplicate ingredients per menu
+  const existingRecipes: Recipe[] = [
+    { id: "rec-1", menuName: "Latte (Regular)", ingredients: [{ ingredientId: "ing-bean", quantity: 18 }] },
+  ];
+  const recPlan = buildRecipeImportPlan(
+    [
+      { "Nama Menu / Varian": "Latte (Regular)", "Nama Bahan Baku": "Espresso Bean", Takaran: 20 },
+      { "Nama Menu / Varian": "Latte (Regular)", "Nama Bahan Baku": "Fresh Milk", Takaran: 150 },
+      { "Nama Menu / Varian": "Espresso", "Nama Bahan Baku": "Espresso Bean", Takaran: 18 },
+    ],
+    ingredients,
+    existingRecipes
+  );
+  assert.strictEqual(recPlan.toUpdate.length, 1);
+  assert.strictEqual(recPlan.toUpdate[0].ingredients.length, 2);
+  assert.strictEqual(recPlan.toCreate.length, 1);
+
+  // Recap import respects closed periods & merges totalAmount
+  const recapRes = parseDailySalesRecapImportRows(
+    [
+      { Tanggal: "2026-04-20", Shift: "PAGI", Tunai: 500000 },
+      { Tanggal: "2026-05-12", Shift: "PAGI", Tunai: 300000, QRIS: 250000 },
+    ],
+    {
+      existingRecaps: [],
+      closedPeriods: [{ period: "2026-04" }],
+      defaultCashAccountId: "cash-1",
+      defaultBankAccountId: "bank-1",
+    }
+  );
+  assert.strictEqual(recapRes.closedSkipped, 1);
+  assert.strictEqual(recapRes.toCreate.length, 1);
+  assert.strictEqual(recapRes.toCreate[0].totalAmount, 550000);
+});
+
+test("48e. formatStockMovementTypeLabel & parseImportedExpenseCategories Kategori Induk bekerja konsisten", () => {
+  assert.strictEqual(formatStockMovementTypeLabel("PURCHASE"), "Pembelian");
+  assert.strictEqual(formatStockMovementTypeLabel("ADJUSTMENT"), "Opname / Koreksi");
+  assert.strictEqual(formatStockMovementTypeLabel("WASTE"), "Waste / Rusak");
+
+  const existingCats: ExpenseCategory[] = [
+    {
+      id: "cat-ops",
+      name: "Operasional",
+      type: "PENGELUARAN",
+      parentId: null,
+      color: "#1b2cc0",
+      icon: "wallet",
+      isActive: true,
+      sortOrder: 1,
+    },
+  ];
+  const parsed = parseImportedExpenseCategories(
+    [
+      { "Nama Kategori": "Listrik & Air", Tipe: "UTILITAS", "Kategori Induk": "Operasional", Warna: "#1b2cc0", Icon: "zap" },
+      { "Nama Kategori": "Listrik & Air", Tipe: "UTILITAS", "Kategori Induk": "Operasional", Warna: "#1b2cc0", Icon: "zap" },
+    ],
+    existingCats,
+    ["zap", "wallet"]
+  );
+  assert.strictEqual(parsed.toCreate.length, 1);
+  assert.strictEqual(parsed.toCreate[0].parentId, "cat-ops");
+  assert.strictEqual(parsed.skipped, 1);
+});
+
+// -------------------------------------------------------------
+// TEST SUITE 49: REGRESSION AUDIT (SPLIT TAX, ZERO QTY, CHANNEL ROUTING & CLOSED PERIOD)
+// -------------------------------------------------------------
+console.log("\n[Suite 49] Regression Bug Fixes...");
+
+test("49a. resolveOrderItemIngredients mengembalikan [] untuk quantity 0 eksplisit dan default 1 jika undefined", () => {
+  const recipes = [
+    {
+      id: "rec-esp",
+      menuName: "Espresso",
+      ingredients: [{ ingredientId: "ing-bean", quantity: 18 }],
+    },
+  ];
+  const ingredients = [
+    { id: "ing-bean", name: "Espresso Bean", unit: "gr", costPerUnit: 250 },
+  ];
+
+  const zeroRes = resolveOrderItemIngredients(
+    { menuName: "Espresso", recipeId: "rec-esp", quantity: 0 },
+    recipes,
+    [],
+    ingredients
+  );
+  assert.deepStrictEqual(zeroRes, []);
+
+  const undefRes = resolveOrderItemIngredients(
+    { menuName: "Espresso", recipeId: "rec-esp", quantity: undefined },
+    recipes,
+    [],
+    ingredients
+  );
+  assert.strictEqual(undefRes.length, 1);
+  assert.strictEqual(undefRes[0].totalQuantity, 18);
+});
+
+test("49b. computeSplitItemsTotals menghitung PB1 EXCLUSIVE & INCLUSIVE identik dengan server split bill", () => {
+  const excl = computeSplitItemsTotals(100000, 10, "EXCLUSIVE");
+  assert.strictEqual(excl.subtotal, 100000);
+  assert.strictEqual(excl.taxAmount, 10000);
+  assert.strictEqual(excl.totalAmount, 110000);
+
+  const incl = computeSplitItemsTotals(110000, 10, "INCLUSIVE");
+  assert.strictEqual(incl.subtotal, 110000);
+  assert.strictEqual(incl.taxAmount, 10000);
+  assert.strictEqual(incl.totalAmount, 110000);
+
+  const noTax = computeSplitItemsTotals(75000, 0, "EXCLUSIVE");
+  assert.strictEqual(noTax.subtotal, 75000);
+  assert.strictEqual(noTax.taxAmount, 0);
+  assert.strictEqual(noTax.totalAmount, 75000);
+});
+
+test("49c. resolveRecapChannelAllocations mempertahankan qrisAccountId/edcAccountId/transferAccountId/onlineDeliveryAccountId", () => {
+  const accounts: CashAccount[] = [
+    { id: "cash-main", name: "Laci Kasir", type: "CASH", isDefault: true },
+    { id: "bank-qris", name: "BCA QRIS", type: "BANK", isDefault: false },
+    { id: "bank-edc", name: "Mandiri EDC", type: "BANK", isDefault: false },
+  ];
+  const recap: DailySalesRecap = {
+    id: "rcp-49c",
+    date: "2026-05-15",
+    shift: "PAGI",
+    cashAmount: 200000,
+    qrisAmount: 150000,
+    edcAmount: 300000,
+    transferAmount: 100000,
+    onlineDeliveryAmount: 50000,
+    discountAmount: 0,
+    refundAmount: 0,
+    mdrFeeAmount: 0,
+    totalAmount: 800000,
+    cashAccountId: "cash-main",
+    bankAccountId: "bank-edc",
+    qrisAccountId: "bank-qris",
+    edcAccountId: "bank-edc",
+    transferAccountId: "bank-qris",
+    onlineDeliveryAccountId: "bank-edc",
+    nonCashSettlementStatus: "SETTLED",
+    createdAt: "2026-05-15T12:00:00Z",
+    recordedBy: "Kasir",
+  };
+  const alloc = resolveRecapChannelAllocations({ recap, mapping: null, cashAccounts: accounts });
+  assert.strictEqual(alloc.cashAccountId, "cash-main");
+  const byAcc = new Map(alloc.nonCashGroups.map((g) => [g.accountId, g.amount]));
+  assert.strictEqual(byAcc.get("bank-qris"), 250000);
+  assert.strictEqual(byAcc.get("bank-edc"), 350000);
 });
 
 // -------------------------------------------------------------

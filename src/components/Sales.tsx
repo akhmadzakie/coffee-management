@@ -64,6 +64,8 @@ import { CustomMonthPicker } from "./common/CustomMonthPicker";
 import { CurrencyInput } from "./common/CurrencyInput";
 import { CustomDatePicker } from "./common/CustomDatePicker";
 import { CustomSelect } from "./common/CustomSelect";
+import { CsvImportExport } from "./common/CsvImportExport";
+import { parseDailySalesRecapImportRows } from "../utils/importHelpers";
 import { PosManagerPinModal } from "./pos/PosManagerPinModal";
 import { ProductSalesDashboard } from "./ProductSalesDashboard";
 import { formatCatalogMenuVariantLabel } from "../utils/productSalesAnalytics";
@@ -975,20 +977,58 @@ export const Sales = () => {
     });
   };
 
-  const handleExportDailyRecap = () => {
+  const handleExportDailyRecap = async () => {
     if (filteredRecaps.length === 0) {
       toast.warning("Tidak ada data rekap omzet harian untuk diekspor.");
       return;
     }
-    exportDailySalesRecapToXlsx({
-      recaps: filteredRecaps,
-      settings,
-      periodLabel:
-        recapFilterMode === "range"
-          ? `${recapStartDate}_sd_${recapEndDate}`
-          : recapDateFilter || "Semua_Tanggal",
-    });
-    toast.success(`${filteredRecaps.length} entri rekap harian berhasil diekspor ke Excel.`);
+    try {
+      await exportDailySalesRecapToXlsx({
+        recaps: filteredRecaps,
+        settings,
+        periodLabel:
+          recapFilterMode === "range"
+            ? `${recapStartDate}_sd_${recapEndDate}`
+            : recapDateFilter || "Semua_Tanggal",
+      });
+      toast.success(`${filteredRecaps.length} entri rekap harian berhasil diekspor ke Excel.`);
+    } catch (err: any) {
+      toast.error("Gagal mengekspor rekap harian: " + (err?.message || err));
+    }
+  };
+
+  const handleImportDailyRecaps = (data: any[]) => {
+    if (isReadOnly) return { added: 0, updated: 0, skipped: data.length };
+    const { toCreate, toUpdate, skipped, closedSkipped } =
+      parseDailySalesRecapImportRows(data, {
+        existingRecaps: dailySalesRecaps,
+        closedPeriods,
+        defaultCashAccountId,
+        defaultBankAccountId,
+        recordedBy: currentUser?.name || "Impor Excel",
+      });
+
+    toUpdate.forEach((rec) => updateDailySalesRecap(rec));
+    toCreate.forEach((rec) => addDailySalesRecap(rec));
+
+    const totalSaved = toCreate.length + toUpdate.length;
+    if (totalSaved > 0) {
+      toast.success(
+        `Berhasil menambah ${toCreate.length} rekap baru & memperbarui ${toUpdate.length} rekap harian.` +
+          (closedSkipped > 0 ? ` (${closedSkipped} baris periode tutup buku dilewati)` : "")
+      );
+    } else {
+      toast.warning(
+        closedSkipped > 0
+          ? `${closedSkipped} baris berada pada periode tutup buku sehingga dilewati.`
+          : "Tidak ada baris rekap omzet valid yang dapat diimpor."
+      );
+    }
+    return {
+      added: toCreate.length,
+      updated: toUpdate.length,
+      skipped: skipped + closedSkipped,
+    };
   };
 
   const handlePrintReceipt = () => {
@@ -1674,6 +1714,85 @@ export const Sales = () => {
             </div>
 
             <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+              <CsvImportExport
+                onImport={handleImportDailyRecaps}
+                canImport={!isReadOnly}
+                requiredHeaders={["Tanggal"]}
+                exportFilename={`Rekap_Omzet_Harian_${getLocalDateString()}`}
+                exportTitle="Rekap Omzet & Penerimaan Kas Harian"
+                templateFilename="Template_Rekap_Omzet_Harian.xlsx"
+                buttonLabel={!isReadOnly ? "Impor / Template" : "Ekspor CSV/Excel"}
+                templateHeaders={[
+                  "Tanggal",
+                  "Shift",
+                  "Tunai",
+                  "QRIS",
+                  "EDC / Kartu",
+                  "Transfer Bank",
+                  "Online Delivery",
+                  "Diskon",
+                  "Refund",
+                  "Biaya MDR",
+                  "Catatan",
+                ]}
+                templateExampleRow={[
+                  getLocalDateString(),
+                  "ALL",
+                  "1500000",
+                  "1200000",
+                  "450000",
+                  "250000",
+                  "350000",
+                  "0",
+                  "0",
+                  "8500",
+                  "Omzet harian normal",
+                ]}
+                currentData={filteredRecaps.map((r) => ({
+                  id: r.id,
+                  Tanggal: String(r.date).slice(0, 10),
+                  Shift: r.shift || "ALL",
+                  Tunai: r.cashAmount || 0,
+                  QRIS: r.qrisAmount || 0,
+                  "EDC / Kartu": r.edcAmount || 0,
+                  "Transfer Bank": r.transferAmount || 0,
+                  "Online Delivery": r.onlineDeliveryAmount || 0,
+                  Diskon: r.discountAmount || 0,
+                  Refund: r.refundAmount || 0,
+                  "Biaya MDR": r.mdrFeeAmount || 0,
+                  Catatan: r.notes || "",
+                }))}
+                templateDropdowns={{
+                  Shift: ["ALL", "PAGI", "MIDDLE", "SORE", "MALAM"],
+                }}
+                templateColumnTypes={{
+                  Tanggal: "date",
+                  Tunai: "integer",
+                  QRIS: "integer",
+                  "EDC / Kartu": "integer",
+                  "Transfer Bank": "integer",
+                  "Online Delivery": "integer",
+                  Diskon: "integer",
+                  Refund: "integer",
+                  "Biaya MDR": "integer",
+                }}
+                templateFormats={{
+                  Tanggal: "date",
+                  Tunai: "currency",
+                  QRIS: "currency",
+                  "EDC / Kartu": "currency",
+                  "Transfer Bank": "currency",
+                  "Online Delivery": "currency",
+                  Diskon: "currency",
+                  Refund: "currency",
+                  "Biaya MDR": "currency",
+                }}
+                templateHints={{
+                  Tanggal: "Format YYYY-MM-DD",
+                  Shift: "Pilih ALL jika rekap digabung satu hari penuh",
+                  Tunai: "Nominal setoran kas tunai (Rupiah bulat)",
+                }}
+              />
               <button
                 type="button"
                 onClick={handleExportDailyRecap}
@@ -2939,6 +3058,15 @@ export const Sales = () => {
                 return;
               }
               try {
+                if (manager?.isRemoteApproved) {
+                  toast.success(
+                    `Pesanan berhasil di-refund via persetujuan jarak jauh (${manager.name})!`
+                  );
+                  setIsRefundPinModalOpen(false);
+                  setSelectedOrderForDetail(null);
+                  fetchPosOrders();
+                  return;
+                }
                 const res = await authFetch(`/api/pos/orders/${selectedOrderForDetail.id}/refund`, {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },

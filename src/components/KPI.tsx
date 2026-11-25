@@ -4,7 +4,7 @@ import React, { useState, useMemo, useEffect } from "react";
 import { motion } from "motion/react";
 import { 
   Save, BookOpen, Target, Award, Sparkles, 
-  Users, Sliders, TrendingUp, CheckCircle2, AlertCircle
+  Users, Sliders, TrendingUp, CheckCircle2, AlertCircle, Download
 } from "lucide-react";
 import { useStore } from "../store/StoreContext";
 import { toast } from "../context/ToastContext";
@@ -13,6 +13,7 @@ import { computePeriodFinancialSummary } from "../utils/financeMetrics";
 import { getLocalPeriodString } from "../utils/dateUtils";
 import { resolveCanonicalEmployeeId } from "../utils/attendanceRecap";
 import { DEFAULT_LEADER_ALLOWANCE_RULES } from "../types";
+import { buildStyledWorkbook } from "../utils/excelTemplate";
 
 export const KPI: React.FC = () => {
   const { 
@@ -31,6 +32,7 @@ export const KPI: React.FC = () => {
     products,
     contracts,
     dailyChecklists,
+    kpiRecords,
     users
   } = useStore() as any;
 
@@ -205,6 +207,77 @@ export const KPI: React.FC = () => {
     toast.success("Pengaturan Target Omzet & Bonus Staf berhasil disimpan!");
   };
 
+  const handleExportKpiSummary = async () => {
+    const periodKpiRecords = (kpiRecords || []).filter((k: any) => {
+      const kPeriod = k.period || `${k.year}-${String(k.month).padStart(2, "0")}`;
+      return kPeriod === currentPeriod;
+    });
+    if ((employeeKpiSummary || []).length === 0 && periodKpiRecords.length === 0) {
+      toast.warning(`Belum ada data KPI atau karyawan aktif pada periode ${currentPeriod}.`);
+      return;
+    }
+    try {
+      const sheets: any[] = [
+        {
+          name: "Ringkasan & Tunjangan",
+          title: `Rekapitulasi Kinerja & Hak Tunjangan Tim (${currentPeriod})`,
+          subtitle: `Capaian Omzet Toko: ${achievementRate.toFixed(1)}% • Target: ${formatCurrency(monthlyTarget)}`,
+          headers: [
+            "Nama Karyawan",
+            "Jabatan",
+            "Divisi",
+            "Peran Tim",
+            "Hari Checklist Aktif",
+            "Skor Checklist (%)",
+            "Status Hak Tunjangan / Bonus",
+          ],
+          rows: (employeeKpiSummary || []).map((item: any) => [
+            item.emp?.name || "-",
+            item.emp?.position || "Staff",
+            item.divKey || "-",
+            item.isLeader ? "Leader QC" : "Staf Pelaksana",
+            item.isLeader ? item.checklistDays || 0 : 0,
+            item.isLeader ? (Number(item.score) || 0) / 100 : 1,
+            item.isLeader
+              ? item.matchedGrade?.label || `${item.matchedGrade?.payoutPercentage ?? 0}%`
+              : isTargetAchieved
+                ? "Berhak Bonus Omzet"
+                : "Target Belum Tercapai",
+          ]),
+          columnFormats: ["text", "text", "text", "text", "integer", "percent", "text"],
+        },
+      ];
+
+      if (periodKpiRecords.length > 0) {
+        sheets.push({
+          name: "Evaluasi Skor KPI",
+          title: `Daftar Evaluasi KPI Karyawan (${currentPeriod})`,
+          headers: ["Nama Karyawan", "Periode", "Skor Total", "Bonus KPI (Rp)", "Evaluator", "Catatan"],
+          rows: periodKpiRecords.map((k: any) => {
+            const emp = (employees || []).find((e: any) => e.id === k.employeeId);
+            return [
+              emp?.name || k.employeeId,
+              k.period || currentPeriod,
+              Math.round(Number(k.totalScore) || 0),
+              Math.round(Number(k.kpiBonus) || 0),
+              k.evaluatedBy || "-",
+              k.notes || "-",
+            ];
+          }),
+          columnFormats: ["text", "text", "integer", "currency", "text", "text"],
+        });
+      }
+
+      await buildStyledWorkbook({
+        filename: `Laporan_KPI_Tim_${currentPeriod}`,
+        sheets,
+      });
+      toast.success(`Laporan KPI periode ${currentPeriod} berhasil diekspor ke Excel (.xlsx).`);
+    } catch (err: any) {
+      toast.error("Gagal mengekspor laporan KPI: " + (err?.message || err));
+    }
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }}
@@ -250,6 +323,14 @@ export const KPI: React.FC = () => {
                 {achievementRate.toFixed(1)}% Omzet
               </span>
             </div>
+            <button
+              type="button"
+              onClick={handleExportKpiSummary}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs transition cursor-pointer"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Ekspor KPI (.xlsx)</span>
+            </button>
           </div>
         </div>
 

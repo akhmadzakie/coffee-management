@@ -5,6 +5,7 @@ import { ShieldCheck, Plus, Trash2, Edit, UserCheck, AlertCircle, X, Link } from
 import { Role, User } from "../types";
 import { useTranslation } from "../utils/i18n";
 import { CsvImportExport } from "./common/CsvImportExport";
+import { normalizeTextCode } from "../utils/genericImport";
 import { ConfirmModal, useConfirm } from "./common/ConfirmModal";
 import { CustomSelect } from "./common/CustomSelect";
 import { motion, AnimatePresence } from "motion/react";
@@ -323,7 +324,7 @@ export const UsersComponent = () => {
   const handleImportUsers = (data: any[]) => {
     if (isOwner) {
       toast.warning("Akun Owner tidak diizinkan mengimpor pengguna.");
-      return;
+      return { added: 0, updated: 0, skipped: data.length };
     }
     let imported = 0;
     let updated = 0;
@@ -331,14 +332,17 @@ export const UsersComponent = () => {
     const seenUsernames = new Set(users.map((u) => u.username.toLowerCase()));
 
     data.forEach((row) => {
-      const idSistem = row["ID_SISTEM (JANGAN DIUBAH)"];
+      const idSistem = String(row["ID_SISTEM (JANGAN DIUBAH)"] || "").trim();
       const name = String(row["Nama Lengkap"] || row.name || "").trim();
-      const username = String(row["Username"] || row.username || "").trim().toLowerCase();
-      const rawPin = row["PIN"] !== undefined && row["PIN"] !== null ? String(row["PIN"]).trim() : "";
+      const username = normalizeTextCode(row["Username"] || row.username).toLowerCase();
+      const rawPin = normalizeTextCode(row["PIN"]);
       const role = String(row["Role"] || row.role || "").trim().toUpperCase() as Role;
       const department = row["Departemen"] || row.department;
 
-      if (!name || !username || !role) return;
+      if (!name || !username || !role) {
+        skipped++;
+        return;
+      }
       if (isManager && !MANAGER_ALLOWED_ROLES.includes(role)) {
         skipped++;
         return;
@@ -364,6 +368,8 @@ export const UsersComponent = () => {
             department: (role === "LEADER" ? department || existing.department || "BAR" : null) as any,
           });
           updated++;
+        } else {
+          skipped++;
         }
       } else {
         if (!rawPin || rawPin.length < 4 || seenUsernames.has(username)) {
@@ -388,6 +394,7 @@ export const UsersComponent = () => {
     } else {
       toast.warning("Tidak ada data valid yang diimpor. Pastikan kolom Nama, Username, PIN, & Role sesuai template.");
     }
+    return { added: imported, updated, skipped };
   };
 
   return (
@@ -402,10 +409,13 @@ export const UsersComponent = () => {
             Kelola akses role pengguna dalam sistem Julia's Management.
           </p>
         </div>
-        {!isOwner && (
-        <div className="flex items-center gap-2.5 shrink-0 flex-nowrap">
+        <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
           <CsvImportExport
             onImport={handleImportUsers}
+            canImport={!isOwner}
+            requiredHeaders={["Nama Lengkap", "Username", "Role"]}
+            exportFilename="Daftar_Pengguna_Sistem"
+            exportTitle="Daftar Pengguna & Hak Akses"
             templateHeaders={["Nama Lengkap", "Username", "PIN", "Role", "Departemen"]}
             templateExampleRow={["Budi Santoso", "budi", "123456", "KASIR", ""]}
             currentData={editableUsers.map(u => ({
@@ -416,28 +426,34 @@ export const UsersComponent = () => {
               "Role": u.role,
               "Departemen": u.department || ""
             }))}
+            exportHeaders={["Nama Lengkap", "Username", "Role", "Departemen"]}
             templateFilename="template_pengguna"
-            buttonLabel="Import Pengguna"
+            buttonLabel={isOwner ? "Ekspor Data" : "Impor / Ekspor"}
             templateDropdowns={{
               Role: isManager
                 ? ["KASIR", "LEADER", "BAR", "KITCHEN", "BAKER"]
                 : ["SUPER_ADMIN", "OWNER", "MANAGER", "FINANCE", "KASIR", "LEADER", "BAR", "KITCHEN", "BAKER"],
               Departemen: ["MAIN", "BAR", "KITCHEN", "BAKER"],
             }}
+            templateFormats={{
+              Username: "text",
+              PIN: "text",
+            }}
             templateHints={{
-              PIN: "PIN 4–6 digit angka (kosongkan saat edit jika tetap)",
+              PIN: "PIN 4–6 digit angka (format teks, kosongkan saat edit jika tetap)",
               Departemen: "Hanya diisi untuk role LEADER",
             }}
           />
-          <button
-            onClick={handleAddNew}
-            className="px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white rounded-xl flex items-center font-bold transition-colors shadow-xs shrink-0 whitespace-nowrap cursor-pointer active:scale-95 text-xs"
-          >
-            <Plus className="w-4 h-4 mr-1.5 shrink-0" />
-            <span>Tambah Pengguna</span>
-          </button>
+          {!isOwner && (
+            <button
+              onClick={handleAddNew}
+              className="px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white rounded-xl flex items-center font-bold transition-colors shadow-xs shrink-0 whitespace-nowrap cursor-pointer active:scale-95 text-xs"
+            >
+              <Plus className="w-4 h-4 mr-1.5 shrink-0" />
+              <span>Tambah Pengguna</span>
+            </button>
+          )}
         </div>
-        )}
       </div>
 
       {/* Banner Akun Ter-suspend (Salah PIN 3x) */}
