@@ -14,6 +14,7 @@
 - **Theme & Global Toast Contexts**: [`src/context/ThemeContext.tsx`](file:///c:/Users/User/Documents/coffee%20management/src/context/ThemeContext.tsx) (`ThemeProvider`, `useTheme`, `ThemeToggleButton`) & [`src/context/ToastContext.tsx`](file:///c:/Users/User/Documents/coffee%20management/src/context/ToastContext.tsx) (`ToastProvider`, `useToast`, `toast`).
 - **Root App & Routing View**: [`src/App.tsx`](file:///c:/Users/User/Documents/coffee%20management/src/App.tsx) (~452 baris) & [`src/components/Layout.tsx`](file:///c:/Users/User/Documents/coffee%20management/src/components/Layout.tsx) (~1.712 baris).
 - **Feature Flags**: [`src/config/features.ts`](file:///c:/Users/User/Documents/coffee%20management/src/config/features.ts) (~25 baris).
+- **UI Hygiene Audit & Verify**: [`scripts/audit-ui.mjs`](file:///c:/Users/User/Documents/coffee%20management/scripts/audit-ui.mjs) — Skrip penjaga kualitas (`npm run audit:ui` & `npm run verify`) untuk memverifikasi 9 aturan Julia's Brand Design, komponen native, konflik animasi, dan grid mobile lintas seluruh komponen.
 
 ---
 
