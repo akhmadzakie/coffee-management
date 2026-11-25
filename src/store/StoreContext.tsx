@@ -52,6 +52,11 @@ import {
 } from "../types";
 import { detectDeviceAsync, DetectedDeviceInfo } from "../utils/deviceDetector";
 import { LOCAL_STORAGE_DATA_CACHE_KEYS } from "../utils/dataCleaning";
+import {
+  evaluateCashAccountProtection,
+  isCoreExpenseCategory,
+  sanitizeCoreExpenseCategoryUpdate,
+} from "../utils/systemGuards";
 import { calculateCashFlowHppSync, resolveOrderItemIngredients } from "../utils/posDomainLogic";
 import { getLocalDateString, getLocalPeriodString } from "../utils/dateUtils";
 import { syncAttendanceRecordsWithDaily } from "../utils/attendanceRecap";
@@ -919,15 +924,16 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       }
       case "UPDATE_EXPENSE_CATEGORY": {
         const prevCat = expenseCategories.find((c) => c.id === action.payload.id);
+        const safeCategory = sanitizeCoreExpenseCategoryUpdate(action.payload, prevCat);
         const nextTransactions = cascadeExpenseCategoryUpdate({
-          updatedCategory: action.payload,
+          updatedCategory: safeCategory,
           previousCategory: prevCat,
           cashTransactions,
         });
         const txChanged = nextTransactions.some((t, idx) => t !== cashTransactions[idx]);
         markChanged(...(txChanged ? ["expense_categories", "cash_transactions"] : ["expense_categories"]));
         setExpenseCategories((prev) => {
-          const next = prev.map((c) => (c.id === action.payload.id ? action.payload : c));
+          const next = prev.map((c) => (c.id === safeCategory.id ? safeCategory : c));
           try {
             localStorage.setItem("app_expense_categories_cache", JSON.stringify(next));
           } catch {}
@@ -942,6 +948,9 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         break;
       }
       case "DELETE_EXPENSE_CATEGORY": {
+        if (isCoreExpenseCategory(action.payload)) {
+          break;
+        }
         const { updatedCategories, updatedTransactions, updatedBudgets } =
           cascadeExpenseCategoryDelete({
             categoryId: action.payload,
@@ -2575,18 +2584,33 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
 
   const updateCashAccount = (acc: CashAccount) => {
     if (currentUser?.role === "OWNER") return;
-    const next = cashAccounts.map((a) => (a.id === acc.id ? acc : a));
+    const prevAcc = cashAccounts.find((a) => a.id === acc.id);
+    let safeAcc = acc;
+    if (prevAcc) {
+      const protection = evaluateCashAccountProtection(prevAcc, cashAccounts, cashTransactions);
+      if (!protection.canChangeType) {
+        safeAcc = {
+          ...acc,
+          type: prevAcc.type,
+          isDefault: prevAcc.isDefault,
+        };
+      }
+    }
+    const next = cashAccounts.map((a) => (a.id === safeAcc.id ? safeAcc : a));
     setCashAccounts(next);
     try {
       localStorage.setItem("app_cash_accounts_cache", JSON.stringify(next));
     } catch {}
-    writeAuditLog("UPDATE", "cash_accounts", acc.id);
+    writeAuditLog("UPDATE", "cash_accounts", safeAcc.id);
     markChanged("cash_accounts");
   };
 
   const deleteCashAccount = (id: string) => {
     if (currentUser?.role === "OWNER") return;
-    if (!cashAccounts.some((a) => a.id === id)) return;
+    const targetAcc = cashAccounts.find((a) => a.id === id);
+    if (!targetAcc) return;
+    const protection = evaluateCashAccountProtection(targetAcc, cashAccounts, cashTransactions);
+    if (!protection.canDelete) return;
     const { updatedAccounts, updatedTransactions, transactionsChanged } =
       cascadeCashAccountDelete({
         accountId: id,

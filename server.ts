@@ -73,6 +73,10 @@ import {
   validateClientSetupPayload,
   buildCleaningSummary,
 } from "./src/utils/dataCleaning.ts";
+import {
+  protectCoreExpenseCategoriesOnSync,
+  protectCashAccountsOnSync,
+} from "./src/utils/systemGuards.ts";
 
 const initialSettings = {
   id: "1",
@@ -3144,7 +3148,13 @@ async function startServer() {
         const hasValidCashAccounts =
           Array.isArray(cash_accounts) && cash_accounts.length > 0;
 
+        let guardedExpenseCategories = hasValidExpenseCategories ? expense_categories : null;
         if (hasValidExpenseCategories) {
+          const existingDbCategories = await tx.select().from(schema.expenseCategories);
+          guardedExpenseCategories = protectCoreExpenseCategoriesOnSync(
+            expense_categories,
+            existingDbCategories
+          );
           await tx.delete(schema.expenseCategories);
         }
         const hasValidUsers = Array.isArray(users) && users.length > 0;
@@ -3154,7 +3164,17 @@ async function startServer() {
           }
           await tx.delete(schema.users);
         }
+        let guardedCashAccounts = hasValidCashAccounts ? cash_accounts : null;
         if (hasValidCashAccounts) {
+          const existingDbCashAccounts = await tx.select().from(schema.cashAccounts);
+          const existingDbCashTxs = await tx
+            .select({ accountId: schema.cashTransactions.accountId })
+            .from(schema.cashTransactions);
+          guardedCashAccounts = protectCashAccountsOnSync(
+            cash_accounts,
+            existingDbCashAccounts,
+            existingDbCashTxs
+          );
           await tx.delete(schema.cashAccounts);
         }
         if (settings !== undefined && settings !== null) {
@@ -3186,9 +3206,9 @@ async function startServer() {
               ),
             ]);
         }
-        if (hasValidCashAccounts) {
-          if (cash_accounts.length > 0) {
-            await tx.insert(schema.cashAccounts).values(cash_accounts.map(sanitizeCashAccount)).onConflictDoNothing();
+        if (hasValidCashAccounts && guardedCashAccounts) {
+          if (guardedCashAccounts.length > 0) {
+            await tx.insert(schema.cashAccounts).values(guardedCashAccounts.map(sanitizeCashAccount)).onConflictDoNothing();
           }
         }
         if (guardedUsers && guardedUsers.length > 0) {
@@ -3209,8 +3229,8 @@ async function startServer() {
             }
           }
         }
-        if (hasValidExpenseCategories) {
-          const sortedCategories = [...expense_categories].sort((a, b) =>
+        if (hasValidExpenseCategories && guardedExpenseCategories) {
+          const sortedCategories = [...guardedExpenseCategories].sort((a, b) =>
             a.parentId && !b.parentId ? 1 : !a.parentId && b.parentId ? -1 : 0
           );
           if (sortedCategories.length > 0) {

@@ -29,6 +29,12 @@ import {
   computeProductSalesAnalytics,
 } from "../utils/productSalesAnalytics";
 import {
+  getProtectedIngredientCategoryReason,
+  isProtectedIngredientCategory,
+  validateIngredientCategoryRename,
+} from "../utils/systemGuards";
+import { Lock } from "lucide-react";
+import {
   Plus,
   Search,
   Trash2,
@@ -754,6 +760,11 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
       toast.error("Nama kategori baru tidak boleh kosong.");
       return;
     }
+    const renameCheck = validateIngredientCategoryRename(oldName, cleanNew);
+    if (!renameCheck.valid) {
+      toast.warning(renameCheck.reason || "Nama kategori tidak dapat diubah.");
+      return;
+    }
     if (
       cleanNew.toLowerCase() !== oldName.toLowerCase() &&
       ingredientCategoriesList.some((c) => c.toLowerCase() === cleanNew.toLowerCase())
@@ -786,8 +797,11 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
       return;
     }
     if (!catToDelete) return;
-    if (catToDelete.toLowerCase() === "lainnya") {
-      toast.error('Kategori "Lainnya" adalah cadangan bawaan dan tidak dapat dihapus.');
+    if (isProtectedIngredientCategory(catToDelete)) {
+      toast.error(
+        getProtectedIngredientCategoryReason(catToDelete) ||
+          "Kategori terintegrasi sistem tidak dapat dihapus."
+      );
       setCatToDelete(null);
       return;
     }
@@ -2713,7 +2727,8 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                   matchesIngredientCategory(i.category, catName)
                 ).length;
                 const isEditing = editingCatOld === catName;
-                const isProtected = catName.toLowerCase() === "lainnya";
+                const isProtected = isProtectedIngredientCategory(catName);
+                const isFallbackLainnya = catName.trim().toLowerCase() === "lainnya";
                 const isOlahan = catName.toLowerCase().includes("olahan");
 
                 return (
@@ -2778,6 +2793,15 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                                 <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-brand-50 dark:bg-brand-500/15 text-brand-700 dark:text-brand-300 border border-brand-200/70 dark:border-brand-500/30">
                                   {getCategoryDivisionLabel(catName)}
                                 </span>
+                                {isProtected && (
+                                  <span
+                                    className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 dark:bg-amber-500/15 text-amber-800 dark:text-amber-300 border border-amber-200/80 dark:border-amber-500/30"
+                                    title={getProtectedIngredientCategoryReason(catName) || undefined}
+                                  >
+                                    <Lock className="w-2.5 h-2.5" />
+                                    Terintegrasi
+                                  </span>
+                                )}
                                 <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 tabular-nums">
                                   {itemCount} bahan
                                 </span>
@@ -2786,18 +2810,34 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                           </div>
                           {canManageCategories && (
                             <div className="flex items-center gap-1 shrink-0">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setEditingCatOld(catName);
-                                  setEditingCatNew(catName);
-                                }}
-                                className="p-1.5 rounded-lg text-slate-500 hover:text-brand-700 hover:bg-brand-50 dark:hover:bg-slate-700 transition-colors cursor-pointer"
-                                title="Ubah nama kategori"
-                              >
-                                <Edit2 className="w-3.5 h-3.5" />
-                              </button>
-                              {!isProtected && (
+                              {!isFallbackLainnya && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingCatOld(catName);
+                                    setEditingCatNew(catName);
+                                  }}
+                                  className="p-1.5 rounded-lg text-slate-500 hover:text-brand-700 hover:bg-brand-50 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+                                  title="Ubah nama kategori"
+                                >
+                                  <Edit2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                              {isProtected ? (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    toast.info(
+                                      getProtectedIngredientCategoryReason(catName) ||
+                                        "Kategori terintegrasi sistem tidak dapat dihapus."
+                                    )
+                                  }
+                                  className="p-1.5 rounded-lg text-amber-600 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-500/15 transition-colors cursor-pointer"
+                                  title="Terkunci sistem (tidak dapat dihapus)"
+                                >
+                                  <Lock className="w-3.5 h-3.5" />
+                                </button>
+                              ) : (
                                 <button
                                   type="button"
                                   onClick={() => setCatToDelete(catName)}
@@ -6052,7 +6092,8 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                           matchesIngredientCategory(i.category, catName)
                         ).length;
                         const isEditing = editingCatOld === catName;
-                        const isProtected = catName.toLowerCase() === "lainnya";
+                        const isProtected = isProtectedIngredientCategory(catName);
+                        const isFallbackLainnya = catName.trim().toLowerCase() === "lainnya";
 
                         return (
                           <div
@@ -6093,9 +6134,17 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                                     <CatIcon className="w-4 h-4" />
                                   </div>
                                   <div className="min-w-0">
-                                    <p className="font-bold text-slate-900 dark:text-slate-100 truncate">
-                                      {catName}
-                                    </p>
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <p className="font-bold text-slate-900 dark:text-slate-100 truncate">
+                                        {catName}
+                                      </p>
+                                      {isProtected && (
+                                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-amber-50 dark:bg-amber-500/15 text-amber-800 dark:text-amber-300 border border-amber-200/80 dark:border-amber-500/30">
+                                          <Lock className="w-2.5 h-2.5" />
+                                          Terintegrasi
+                                        </span>
+                                      )}
+                                    </div>
                                     <p className="text-[11px] text-slate-500 dark:text-slate-400 tabular-nums">
                                       {getCategoryDivisionLabel(catName)} • {itemCount} bahan terdaftar
                                     </p>
@@ -6103,18 +6152,34 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                                 </div>
                                 {canManageCategories && (
                                   <div className="flex items-center gap-1 shrink-0">
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setEditingCatOld(catName);
-                                        setEditingCatNew(catName);
-                                      }}
-                                      className="p-1.5 rounded-lg text-slate-500 hover:text-brand-700 hover:bg-brand-50 dark:hover:bg-slate-700 transition-colors cursor-pointer"
-                                      title="Ubah nama kategori"
-                                    >
-                                      <Edit2 className="w-3.5 h-3.5" />
-                                    </button>
-                                    {!isProtected && (
+                                    {!isFallbackLainnya && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setEditingCatOld(catName);
+                                          setEditingCatNew(catName);
+                                        }}
+                                        className="p-1.5 rounded-lg text-slate-500 hover:text-brand-700 hover:bg-brand-50 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+                                        title="Ubah nama kategori"
+                                      >
+                                        <Edit2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    )}
+                                    {isProtected ? (
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          toast.info(
+                                            getProtectedIngredientCategoryReason(catName) ||
+                                              "Kategori terintegrasi sistem tidak dapat dihapus."
+                                          )
+                                        }
+                                        className="p-1.5 rounded-lg text-amber-600 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-500/15 transition-colors cursor-pointer"
+                                        title="Terkunci sistem (tidak dapat dihapus)"
+                                      >
+                                        <Lock className="w-3.5 h-3.5" />
+                                      </button>
+                                    ) : (
                                       <button
                                         type="button"
                                         onClick={() => setCatToDelete(catName)}

@@ -48,6 +48,8 @@ import {
 import { motion, AnimatePresence } from "motion/react";
 import { CsvImportExport } from "./common/CsvImportExport";
 import { ConfirmModal } from "./common/ConfirmModal";
+import { isCoreExpenseCategory } from "../utils/systemGuards";
+import { Lock } from "lucide-react";
 
 // ─── Icon Map ───────────────────────────────────────────────────────────────
 const ICON_MAP: Record<string, React.FC<any>> = {
@@ -189,6 +191,7 @@ const CategoryModalForm: React.FC<CategoryModalFormProps> = ({
 
   if (typeof document === "undefined") return null;
 
+  const isCoreSystem = isCoreExpenseCategory(initial?.id);
   const hasExistingChildren = Boolean(
     initial?.id && categories.some((c) => c.parentId === initial.id),
   );
@@ -202,8 +205,10 @@ const CategoryModalForm: React.FC<CategoryModalFormProps> = ({
     if (!name.trim()) return;
     onSave({
       name: name.trim(),
-      type,
-      parentId: hasExistingChildren ? null : parentId,
+      type: isCoreSystem && initial?.type ? initial.type : type,
+      parentId: isCoreSystem
+        ? (initial?.parentId ?? null)
+        : (hasExistingChildren ? null : parentId),
       color,
       icon,
       isActive,
@@ -270,6 +275,15 @@ const CategoryModalForm: React.FC<CategoryModalFormProps> = ({
 
             {/* Form Body */}
             <form onSubmit={handleSubmit} className="p-6 space-y-4">
+              {isCoreSystem && (
+                <div className="p-3 rounded-2xl bg-brand-50/80 dark:bg-brand-500/15 border border-brand-200/80 dark:border-brand-500/30 flex items-start gap-2.5">
+                  <Lock className="w-4 h-4 text-brand-700 dark:text-brand-300 shrink-0 mt-0.5" />
+                  <p className="text-[11px] font-medium text-brand-900 dark:text-brand-200 leading-relaxed">
+                    <strong>Kategori bawaan sistem:</strong> Anda bebas mengubah Nama, Warna, dan Ikon. Tipe Akun &amp; Kategori Induk dikunci agar laporan Laba Rugi, HPP, dan Kas tetap akurat.
+                  </p>
+                </div>
+              )}
+
               {/* Name */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 uppercase tracking-wider">
@@ -295,6 +309,7 @@ const CategoryModalForm: React.FC<CategoryModalFormProps> = ({
                   <CustomSelect
                     value={type}
                     onChange={(val) => setType(val as ExpenseCategoryType)}
+                    disabled={isCoreSystem}
                     options={CATEGORY_TYPES.map((t) => ({
                       value: t.value,
                       label: t.label,
@@ -311,7 +326,7 @@ const CategoryModalForm: React.FC<CategoryModalFormProps> = ({
                   <CustomSelect
                     value={hasExistingChildren ? "" : (parentId ?? "")}
                     onChange={(val) => setParentId(val || null)}
-                    disabled={hasExistingChildren}
+                    disabled={isCoreSystem || hasExistingChildren}
                     options={[
                       { value: "", label: "— Pos Utama (Header / Root) —" },
                       ...rootCategories.map((c) => ({
@@ -492,6 +507,7 @@ const TreeNode: React.FC<TreeNodeProps> = ({
   const hasChildren = (category.children?.length ?? 0) > 0;
   const IconComp = ICON_MAP[category.icon] ?? Tag;
   const config = TYPE_CONFIG[category.type] || TYPE_CONFIG.LAINNYA;
+  const isCore = isCoreExpenseCategory(category.id);
 
   return (
     <motion.div
@@ -551,6 +567,15 @@ const TreeNode: React.FC<TreeNodeProps> = ({
               >
                 {config.label}
               </span>
+              {isCore && (
+                <span
+                  className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-brand-50 dark:bg-brand-500/15 text-brand-700 dark:text-brand-300 border border-brand-200/80 dark:border-brand-500/30"
+                  title="Kategori inti terintegrasi sistem (tidak dapat dihapus, hanya boleh edit nama/warna/ikon)"
+                >
+                  <Lock className="w-2.5 h-2.5" />
+                  Sistem
+                </span>
+              )}
               {!category.isActive && (
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
                   Nonaktif
@@ -580,19 +605,34 @@ const TreeNode: React.FC<TreeNodeProps> = ({
               type="button"
               onClick={() => onEdit(category)}
               className="p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:text-brand-700 dark:hover:text-brand-300 hover:bg-brand-50 dark:hover:bg-brand-500/15 border border-slate-200/80 dark:border-slate-700 transition-colors cursor-pointer shadow-2xs"
-              title="Edit Kategori"
+              title={isCore ? "Edit Nama, Warna, atau Ikon" : "Edit Kategori"}
             >
               <Edit2 className="w-3.5 h-3.5" />
             </button>
 
-            <button
-              type="button"
-              onClick={() => onDelete(category)}
-              className="p-2 rounded-xl text-slate-400 hover:text-rose-600 dark:hover:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-500/15 border border-slate-200/80 dark:border-slate-700 transition-colors cursor-pointer shadow-2xs"
-              title="Hapus Kategori"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-            </button>
+            {isCore ? (
+              <button
+                type="button"
+                onClick={() =>
+                  toast.info(
+                    `Kategori "${category.name}" terintegrasi dengan laporan Laba Rugi & HPP sehingga tidak dapat dihapus (hanya boleh diubah nama/warna/ikon).`
+                  )
+                }
+                className="p-2 rounded-xl text-amber-600 dark:text-amber-300 bg-amber-50/70 dark:bg-amber-500/15 border border-amber-200/80 dark:border-amber-500/30 transition-colors cursor-pointer shadow-2xs"
+                title="Terkunci sistem (hanya bisa edit nama/warna/ikon)"
+              >
+                <Lock className="w-3.5 h-3.5" />
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => onDelete(category)}
+                className="p-2 rounded-xl text-slate-400 hover:text-rose-600 dark:hover:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-500/15 border border-slate-200/80 dark:border-slate-700 transition-colors cursor-pointer shadow-2xs"
+                title="Hapus Kategori"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -610,6 +650,7 @@ const TreeNode: React.FC<TreeNodeProps> = ({
             <div className="border-l-2 border-brand-200/80 dark:border-brand-500/40 ml-3.5 pl-3 sm:pl-4 space-y-2">
               {category.children!.map((child) => {
                 const ChildIcon = ICON_MAP[child.icon] ?? Tag;
+                const isChildCore = isCoreExpenseCategory(child.id);
                 return (
                   <div
                     key={child.id}
@@ -628,7 +669,7 @@ const TreeNode: React.FC<TreeNodeProps> = ({
                           style={{ color: child.color }}
                         />
                       </div>
-                      <div className="min-w-0">
+                      <div className="min-w-0 flex items-center gap-1.5">
                         <span
                           className={`text-xs font-semibold truncate block ${
                             child.isActive
@@ -638,6 +679,15 @@ const TreeNode: React.FC<TreeNodeProps> = ({
                         >
                           {child.name}
                         </span>
+                        {isChildCore && (
+                          <span
+                            className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-brand-50 dark:bg-brand-500/15 text-brand-700 dark:text-brand-300 border border-brand-200/70 dark:border-brand-500/30 shrink-0"
+                            title="Sub-kategori inti terintegrasi sistem"
+                          >
+                            <Lock className="w-2.5 h-2.5" />
+                            Sistem
+                          </span>
+                        )}
                       </div>
                     </div>
 
@@ -648,18 +698,33 @@ const TreeNode: React.FC<TreeNodeProps> = ({
                           type="button"
                           onClick={() => onEdit(child)}
                           className="p-1.5 rounded-lg text-slate-500 dark:text-slate-400 hover:text-brand-600 dark:hover:text-brand-300 hover:bg-brand-50 dark:hover:bg-brand-500/15 transition-colors cursor-pointer"
-                          title="Edit Sub-kategori"
+                          title={isChildCore ? "Edit Nama, Warna, atau Ikon" : "Edit Sub-kategori"}
                         >
                           <Edit2 className="w-3 h-3" />
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => onDelete(child)}
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 dark:hover:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-500/15 transition-colors cursor-pointer"
-                          title="Hapus Sub-kategori"
-                        >
-                          <Trash2 className="w-3 h-3" />
-                        </button>
+                        {isChildCore ? (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              toast.info(
+                                `Sub-kategori "${child.name}" terintegrasi dengan sistem keuangan sehingga tidak dapat dihapus (hanya boleh diubah nama/warna/ikon).`
+                              )
+                            }
+                            className="p-1.5 rounded-lg text-amber-600 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-500/15 transition-colors cursor-pointer"
+                            title="Terkunci sistem (hanya bisa edit nama/warna/ikon)"
+                          >
+                            <Lock className="w-3 h-3" />
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => onDelete(child)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 dark:hover:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-500/15 transition-colors cursor-pointer"
+                            title="Hapus Sub-kategori"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
@@ -799,12 +864,25 @@ export function ExpenseCategories() {
 
   const handleDeletePrompt = (cat: ExpenseCategory) => {
     if (isReadOnly) return;
+    if (isCoreExpenseCategory(cat.id)) {
+      toast.warning(
+        `Kategori "${cat.name}" terintegrasi dengan sistem keuangan dan tidak dapat dihapus (hanya boleh diubah nama, warna, atau ikonnya).`
+      );
+      return;
+    }
     setCategoryToDelete(cat);
   };
 
   const handleConfirmDelete = () => {
     if (isReadOnly) return;
     if (categoryToDelete) {
+      if (isCoreExpenseCategory(categoryToDelete.id)) {
+        toast.warning(
+          `Kategori "${categoryToDelete.name}" tidak dapat dihapus karena terintegrasi dengan sistem.`
+        );
+        setCategoryToDelete(null);
+        return;
+      }
       deleteExpenseCategory(categoryToDelete.id);
       toast.success(`Kategori "${categoryToDelete.name}" berhasil dihapus.`);
       setCategoryToDelete(null);

@@ -12,6 +12,15 @@ import {
   withBrandLogoVersion,
 } from "../src/utils/brandLogo";
 import {
+  isCoreExpenseCategory,
+  sanitizeCoreExpenseCategoryUpdate,
+  protectCoreExpenseCategoriesOnSync,
+  isProtectedIngredientCategory,
+  validateIngredientCategoryRename,
+  evaluateCashAccountProtection,
+  protectCashAccountsOnSync,
+} from "../src/utils/systemGuards";
+import {
   DEFAULT_STORE_TIMEZONE,
   getLocalDateString,
   getLocalPeriodString,
@@ -5984,6 +5993,127 @@ test("45. brandLogo resolver memilih varian logo adaptif & menghormati logo kust
   for (const pwaFile of ["favicon.png", "apple-touch-icon.png", "icon-192.png", "icon-512.png"]) {
     assert.ok(fs.existsSync(path.join(publicDir, pwaFile)), `Ikon PWA harus tersedia: ${pwaFile}`);
   }
+});
+
+// -------------------------------------------------------------
+// 46. PENGUJIAN PROTEKSI KATEGORI TERINTEGRASI & POS KAS/TABUNGAN
+// -------------------------------------------------------------
+test("46a. 32 kategori keuangan inti dikunci hapus & tipe/induknya, namun bebas ubah nama/warna/ikon", () => {
+  assert.strictEqual(isCoreExpenseCategory("cat-bahan-baku"), true);
+  assert.strictEqual(isCoreExpenseCategory("cat-packaging"), true);
+  assert.strictEqual(isCoreExpenseCategory("cat-custom-promo"), false);
+
+  const existingCore: ExpenseCategory = {
+    id: "cat-packaging",
+    name: "Packaging & Kemasan",
+    type: "BAHAN_BAKU",
+    parentId: "cat-bahan-baku",
+    color: "#FCD34D",
+    icon: "box",
+    isActive: true,
+    sortOrder: 4,
+  };
+  const customCategory: ExpenseCategory = {
+    id: "cat-custom-1",
+    name: "Dekorasi Event",
+    type: "PENGELUARAN",
+    parentId: null,
+    color: "#1b2cc0",
+    icon: "tag",
+    isActive: true,
+    sortOrder: 99,
+  };
+
+  // Mencoba ubah tipe & induk pada kategori inti -> tetap dikunci, nama & warna berhasil berubah
+  const sanitized = sanitizeCoreExpenseCategoryUpdate(
+    {
+      ...existingCore,
+      name: "Gelas & Kemasan Toko",
+      color: "#10B981",
+      type: "PENDAPATAN",
+      parentId: null,
+    },
+    existingCore
+  );
+  assert.strictEqual(sanitized.name, "Gelas & Kemasan Toko");
+  assert.strictEqual(sanitized.color, "#10B981");
+  assert.strictEqual(sanitized.type, "BAHAN_BAKU");
+  assert.strictEqual(sanitized.parentId, "cat-bahan-baku");
+
+  // Sync yang mencoba menghapus cat-packaging tetap mengembalikannya dari DB
+  const synced = protectCoreExpenseCategoriesOnSync(
+    [customCategory],
+    [existingCore, customCategory]
+  );
+  assert.strictEqual(synced.some((c) => c.id === "cat-packaging"), true);
+  assert.strictEqual(synced.some((c) => c.id === "cat-custom-1"), true);
+});
+
+test("46b. Opsi 2 melindungi kategori bahan kritis (Bahan Olahan, Packaging & Cup, Lainnya) & jaga kata kunci rename", async () => {
+  const { matchesIngredientCategory } = await import("../src/utils/financeMetrics");
+
+  assert.strictEqual(isProtectedIngredientCategory("Bahan Olahan"), true);
+  assert.strictEqual(isProtectedIngredientCategory("Packaging & Cup"), true);
+  assert.strictEqual(isProtectedIngredientCategory("Lainnya"), true);
+  assert.strictEqual(isProtectedIngredientCategory("Biji Kopi"), false);
+  assert.strictEqual(isProtectedIngredientCategory("Topping Khusus"), false);
+
+  // Rename valid yang menjaga peran fungsional
+  assert.strictEqual(validateIngredientCategoryRename("Bahan Olahan", "Bahan Olahan Bar").valid, true);
+  assert.strictEqual(validateIngredientCategoryRename("Packaging & Cup", "Kemasan & Gelas").valid, true);
+  // Pastikan filter HPP/Olahan tetap mengenali nama baru tersebut
+  assert.strictEqual(matchesIngredientCategory("Bahan Olahan Bar", "Bahan Olahan"), true);
+  assert.strictEqual(matchesIngredientCategory("Kemasan & Gelas", "Packaging & Cup"), true);
+
+  // Rename yang memutus integrasi atau mengubah Lainnya harus ditolak
+  assert.strictEqual(validateIngredientCategoryRename("Bahan Olahan", "Sirup").valid, false);
+  assert.strictEqual(validateIngredientCategoryRename("Packaging & Cup", "Bumbu").valid, false);
+  assert.strictEqual(validateIngredientCategoryRename("Lainnya", "Umum").valid, false);
+});
+
+test("46c. Pos Kas Utama & Rekening Tabungan/Bank aktif dikunci hapus & jenisnya, akun kosong tetap boleh dihapus", () => {
+  const mainCash: CashAccount = { id: "cash-drawer-main", name: "Laci Kasir Utama", type: "CASH", isDefault: true };
+  const activeSavings: CashAccount = { id: "acc-sav-1", name: "Tabungan Cadangan", type: "SAVINGS", isDefault: false };
+  const emptyBank: CashAccount = { id: "acc-bank-empty", name: "Bank Mandiri Baru", type: "BANK", isDefault: false };
+  const allAccounts = [mainCash, activeSavings, emptyBank];
+
+  const txs: CashTransaction[] = [
+    {
+      id: "tx-sav-1",
+      accountId: "acc-sav-1",
+      type: "CASH_IN",
+      date: "2026-11-25",
+      amount: 1000000,
+      description: "Setor dana cadangan",
+      category: "Transfer",
+    },
+  ];
+
+  const mainProt = evaluateCashAccountProtection(mainCash, allAccounts, txs);
+  assert.strictEqual(mainProt.canDelete, false);
+  assert.strictEqual(mainProt.canChangeType, false);
+
+  const savProt = evaluateCashAccountProtection(activeSavings, allAccounts, txs);
+  assert.strictEqual(savProt.canDelete, false);
+  assert.strictEqual(savProt.canChangeType, false);
+  assert.strictEqual(savProt.balance, 1000000);
+
+  const emptyProt = evaluateCashAccountProtection(emptyBank, allAccounts, txs);
+  assert.strictEqual(emptyProt.canDelete, true);
+  assert.strictEqual(emptyProt.canChangeType, true);
+
+  // Sync guard melarang hapus akun utama/aktif dan mengunci type saat rename diizinkan
+  const synced = protectCashAccountsOnSync(
+    [{ id: "acc-sav-1", name: "Tabungan Toko BCA", type: "BANK", isDefault: false }],
+    allAccounts,
+    [{ accountId: "acc-sav-1" }]
+  );
+  const syncedMain = synced.find((a) => a.id === "cash-drawer-main");
+  const syncedSav = synced.find((a) => a.id === "acc-sav-1");
+  assert.ok(syncedMain, "Pos Kas Utama tidak boleh terhapus oleh sync");
+  assert.ok(syncedSav, "Tabungan aktif tidak boleh terhapus oleh sync");
+  assert.strictEqual(syncedSav?.name, "Tabungan Toko BCA");
+  assert.strictEqual(syncedSav?.type, "SAVINGS");
 });
 
 // -------------------------------------------------------------

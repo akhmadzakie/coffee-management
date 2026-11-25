@@ -66,6 +66,7 @@ import {
   computePeriodFinancialSummary,
   parseBankStatementAmount,
 } from "../utils/financeMetrics";
+import { evaluateCashAccountProtection } from "../utils/systemGuards";
 import { CsvImportExport } from "./common/CsvImportExport";
 
 interface CashFlowProps {
@@ -1435,10 +1436,15 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
     if (!trimmedName) return;
 
     if (editingAccount) {
+      const protection = evaluateCashAccountProtection(
+        editingAccount,
+        cashAccounts,
+        cashTransactions
+      );
       updateCashAccount({
         ...editingAccount,
         name: trimmedName,
-        type: accType,
+        type: protection.canChangeType ? accType : editingAccount.type,
       });
       toast.success(`Pos Kas "${trimmedName}" berhasil diperbarui.`);
     } else {
@@ -2056,6 +2062,11 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
               {/* Individual Account Cards */}
               {cashAccounts.map((acc) => {
                 const isSelected = selectedAccountId === acc.id;
+                const accProtection = evaluateCashAccountProtection(
+                  acc,
+                  cashAccounts,
+                  cashTransactions
+                );
                 return (
                   <div
                     key={acc.id}
@@ -2087,46 +2098,60 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
                                   ? "hover:bg-white/20 text-white"
                                   : "hover:bg-slate-200/70 text-slate-400 hover:text-slate-700"
                               }`}
-                              title="Edit Nama / Jenis Pos Kas"
+                              title={
+                                accProtection.canChangeType
+                                  ? "Edit Nama / Jenis Pos Kas"
+                                  : "Edit Nama Pos Kas"
+                              }
                             >
                               <Edit3 className="w-3.5 h-3.5" />
                             </button>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                const linkedTxCount = cashTransactions.filter(
-                                  (t) => t.accountId === acc.id
-                                ).length;
-                                if (cashAccounts.length <= 1 && linkedTxCount > 0) {
-                                  toast.warning(
-                                    `Pos Kas terakhir tidak dapat dihapus karena masih memiliki ${linkedTxCount} transaksi terkait.`
+                            {accProtection.canDelete ? (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setConfirmAction({
+                                    title: `Hapus Pos Kas "${acc.name}"?`,
+                                    message:
+                                      "Pos kas ini belum memiliki riwayat transaksi sehingga aman untuk dihapus.",
+                                    confirmLabel: "Ya, Hapus",
+                                    onConfirm: () => {
+                                      deleteCashAccount(acc.id);
+                                      if (selectedAccountId === acc.id) setSelectedAccountId("all");
+                                      toast.success(`Pos kas "${acc.name}" berhasil dihapus.`);
+                                    },
+                                  });
+                                }}
+                                className={`p-1.5 rounded-lg opacity-80 sm:opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer ${
+                                  isSelected
+                                    ? "hover:bg-white/20 text-white"
+                                    : "hover:bg-rose-50 text-slate-400 hover:text-rose-600"
+                                }`}
+                                title="Hapus Pos Kas"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toast.info(
+                                    accProtection.deleteBlockReason ||
+                                      "Pos Kas ini terintegrasi dengan data transaksi dan hanya boleh diubah namanya."
                                   );
-                                  return;
-                                }
-                                setConfirmAction({
-                                  title: `Hapus Pos Kas "${acc.name}"?`,
-                                  message:
-                                    linkedTxCount > 0
-                                      ? `Terdapat ${linkedTxCount} transaksi di pos ini. Mutasi Saldo Awal pos ini akan dihapus dan transaksi lainnya akan dipindahkan otomatis ke pos kas utama/berikutnya.`
-                                      : "Pastikan tidak ada transaksi aktif yang masih bergantung pada pos ini.",
-                                  confirmLabel: "Ya, Hapus",
-                                  onConfirm: () => {
-                                    deleteCashAccount(acc.id);
-                                    if (selectedAccountId === acc.id) setSelectedAccountId("all");
-                                    toast.success(`Pos kas "${acc.name}" berhasil dihapus.`);
-                                  },
-                                });
-                              }}
-                              className={`p-1.5 rounded-lg opacity-80 sm:opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer ${
-                                isSelected
-                                  ? "hover:bg-white/20 text-white"
-                                  : "hover:bg-rose-50 text-slate-400 hover:text-rose-600"
-                              }`}
-                              title="Hapus Pos Kas"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                                }}
+                                className={`p-1.5 rounded-lg transition-opacity cursor-pointer ${
+                                  isSelected
+                                    ? "bg-white/15 text-white/90 hover:bg-white/25"
+                                    : "text-amber-600 dark:text-amber-300 bg-amber-50/80 dark:bg-amber-500/15 hover:bg-amber-100"
+                                }`}
+                                title={accProtection.deleteBlockReason}
+                              >
+                                <Lock className="w-3.5 h-3.5" />
+                              </button>
+                            )}
                           </>
                         )}
                       </div>
@@ -4065,18 +4090,39 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
                       <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">
                         Jenis Pos Kas
                       </label>
-                      <CustomSelect
-                        value={accType}
-                        onChange={(val) => setAccType(val as any)}
-                        required
-                        options={[
-                          { value: "CASH", label: "Tunai (Kas Operasional / Petty Cash)" },
-                          { value: "BANK", label: "Rekening Bank (BCA / Mandiri / BRI / BNI)" },
-                          { value: "E_WALLET", label: "Dompet Digital (QRIS / GoPay / OVO / Dana)" },
-                          { value: "SAVINGS", label: "Tabungan / Dana Cadangan Toko" },
-                        ]}
-                        buttonClassName="w-full px-3.5 py-2.5 text-sm sm:text-xs font-semibold border border-slate-200 rounded-2xl bg-slate-50/50 hover:bg-white"
-                      />
+                      {(() => {
+                        const editProt = editingAccount
+                          ? evaluateCashAccountProtection(
+                              editingAccount,
+                              cashAccounts,
+                              cashTransactions
+                            )
+                          : null;
+                        const isTypeLocked = Boolean(editProt && !editProt.canChangeType);
+                        return (
+                          <>
+                            <CustomSelect
+                              value={accType}
+                              onChange={(val) => setAccType(val as any)}
+                              disabled={isTypeLocked}
+                              required
+                              options={[
+                                { value: "CASH", label: "Tunai (Kas Operasional / Petty Cash)" },
+                                { value: "BANK", label: "Rekening Bank (BCA / Mandiri / BRI / BNI)" },
+                                { value: "E_WALLET", label: "Dompet Digital (QRIS / GoPay / OVO / Dana)" },
+                                { value: "SAVINGS", label: "Tabungan / Dana Cadangan Toko" },
+                              ]}
+                              buttonClassName="w-full px-3.5 py-2.5 text-sm sm:text-xs font-semibold border border-slate-200 rounded-2xl bg-slate-50/50 hover:bg-white"
+                            />
+                            {isTypeLocked && editProt?.typeLockReason && (
+                              <p className="mt-1.5 text-[11px] font-medium text-amber-700 dark:text-amber-300 flex items-start gap-1.5">
+                                <Lock className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                                <span>{editProt.typeLockReason}</span>
+                              </p>
+                            )}
+                          </>
+                        );
+                      })()}
                     </div>
 
                     {!editingAccount && (

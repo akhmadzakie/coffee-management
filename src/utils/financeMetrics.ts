@@ -634,7 +634,7 @@ const INGREDIENT_CATEGORY_ALIASES: Record<string, string[]> = {
   "biji kopi": ["coffee", "biji kopi", "espresso", "bean"],
   "susu & dairy": ["dairy", "susu & dairy", "susu", "milk"],
   "sirup & pemanis": ["pemanis", "sirup & pemanis", "syrup", "sirup", "gula"],
-  "bahan olahan": ["kondimen olahan", "bahan olahan", "olahan", "batch prep", "sub-recipe"],
+  "bahan olahan": ["kondimen olahan", "bahan olahan", "olahan", "racikan", "batch prep", "sub-recipe"],
   "bahan kitchen": ["kitchen", "bahan kitchen", "dapur"],
   "bahan bakery": ["bakery", "bahan bakery", "pastry", "roti"],
   "packaging & cup": ["packaging", "packaging & cup", "kemasan", "cup"],
@@ -648,7 +648,7 @@ export function normalizeIngredientCategoryName(category?: string | null): strin
   if (["coffee", "espresso", "bean"].includes(lower)) return "Biji Kopi";
   if (["dairy", "susu"].includes(lower)) return "Susu & Dairy";
   if (["pemanis", "sirup", "syrup"].includes(lower)) return "Sirup & Pemanis";
-  if (["kondimen olahan", "bahan olahan", "olahan", "batch prep", "sub-recipe"].includes(lower)) {
+  if (["kondimen olahan", "bahan olahan", "olahan", "racikan", "batch prep", "sub-recipe"].includes(lower)) {
     return "Bahan Olahan";
   }
   if (["kitchen", "dapur"].includes(lower)) return "Bahan Kitchen";
@@ -657,7 +657,7 @@ export function normalizeIngredientCategoryName(category?: string | null): strin
   return raw;
 }
 
-/** Mengecek apakah kategori bahan cocok dengan filter kategori (mendukung alias lama). */
+/** Mengecek apakah kategori bahan cocok dengan filter kategori (mendukung alias & hasil rename terintegrasi). */
 export function matchesIngredientCategory(
   ingredientCategory: string | undefined | null,
   selectedCategory: string
@@ -670,7 +670,22 @@ export function matchesIngredientCategory(
     return true;
   }
   const aliases = INGREDIENT_CATEGORY_ALIASES[normalizedTarget];
-  return aliases ? aliases.includes(normalizedIng) : false;
+  if (aliases && aliases.includes(normalizedIng)) {
+    return true;
+  }
+  if (
+    normalizedTarget === "bahan olahan" &&
+    ["olahan", "racikan", "batch prep", "sub-recipe"].some((kw) => normalizedIng.includes(kw))
+  ) {
+    return true;
+  }
+  if (
+    normalizedTarget === "packaging & cup" &&
+    ["packaging", "kemasan", "cup"].some((kw) => normalizedIng.includes(kw))
+  ) {
+    return true;
+  }
+  return false;
 }
 
 /** Menyusun daftar kategori bahan baku dinamis dari Settings + kategori aktual pada daftar bahan. */
