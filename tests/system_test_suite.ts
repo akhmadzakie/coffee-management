@@ -21,6 +21,10 @@ import {
   protectCashAccountsOnSync,
 } from "../src/utils/systemGuards";
 import {
+  resolveEffectivePaymentAccountMapping,
+  resolveRecapChannelAllocations,
+} from "../src/utils/paymentRouting";
+import {
   DEFAULT_STORE_TIMEZONE,
   getLocalDateString,
   getLocalPeriodString,
@@ -166,6 +170,7 @@ import {
   CashTransaction,
   CashAccount,
   DailyAttendance,
+  DailySalesRecap,
   Employee,
   ExpenseCategory,
   PayrollRecord,
@@ -6143,6 +6148,120 @@ test("46c. Pos Kas Utama, Rekening Bank terhubung rekap & Tabungan aktif dikunci
   assert.ok(syncedBank, "Rekening Bank terhubung Rekap Penjualan tidak boleh terhapus oleh sync");
   assert.strictEqual(syncedBank?.name, "BCA Kasir & QRIS");
   assert.strictEqual(syncedBank?.type, "BANK");
+});
+
+// -------------------------------------------------------------
+// 47. PENGUJIAN MAPPING REKENING DEFAULT PER METODE PEMBAYARAN
+// -------------------------------------------------------------
+test("47a. resolveEffectivePaymentAccountMapping & resolveRecapChannelAllocations menggabung rekening sama & memecah rekening beda", () => {
+  const accounts: CashAccount[] = [
+    { id: "cash-main", name: "Laci Kasir", type: "CASH", isDefault: true },
+    { id: "bank-bca", name: "Bank BCA", type: "BANK", isDefault: false },
+    { id: "bank-mandiri", name: "Bank Mandiri", type: "BANK", isDefault: false },
+  ];
+
+  // Skenario 1: QRIS + Transfer ke BCA, EDC + Ojol ke Mandiri
+  const splitMapping = {
+    cash: "cash-main",
+    qris: "bank-bca",
+    transfer: "bank-bca",
+    edc: "bank-mandiri",
+    onlineDelivery: "bank-mandiri",
+  };
+  const effective = resolveEffectivePaymentAccountMapping(splitMapping, accounts);
+  assert.strictEqual(effective.qris, "bank-bca");
+  assert.strictEqual(effective.onlineDelivery, "bank-mandiri");
+
+  const recap: DailySalesRecap = {
+    id: "rec-split-1",
+    date: "2026-11-25",
+    cashAmount: 500000,
+    qrisAmount: 300000,
+    edcAmount: 200000,
+    transferAmount: 150000,
+    onlineDeliveryAmount: 250000,
+    totalAmount: 1400000,
+    recordedBy: "Finance",
+    createdAt: "2026-11-25T10:00:00Z",
+  };
+
+  const splitAlloc = resolveRecapChannelAllocations({
+    recap,
+    mapping: splitMapping,
+    cashAccounts: accounts,
+  });
+  assert.strictEqual(splitAlloc.cashAccountId, "cash-main");
+  assert.strictEqual(splitAlloc.cashAmount, 500000);
+  assert.strictEqual(splitAlloc.nonCashGroups.length, 2);
+  const bcaGroup = splitAlloc.nonCashGroups.find((g) => g.accountId === "bank-bca");
+  const mandiriGroup = splitAlloc.nonCashGroups.find((g) => g.accountId === "bank-mandiri");
+  assert.strictEqual(bcaGroup?.amount, 450000);
+  assert.strictEqual(mandiriGroup?.amount, 450000);
+
+  // Skenario 2: Semua metode non-tunai diarahkan ke 1 bank -> digabung menjadi 1 mutasi bersih
+  const singleBankMapping = {
+    cash: "cash-main",
+    qris: "bank-bca",
+    edc: "bank-bca",
+    transfer: "bank-bca",
+    onlineDelivery: "bank-bca",
+  };
+  const mergedAlloc = resolveRecapChannelAllocations({
+    recap,
+    mapping: singleBankMapping,
+    cashAccounts: accounts,
+  });
+  assert.strictEqual(mergedAlloc.nonCashGroups.length, 1);
+  assert.strictEqual(mergedAlloc.nonCashGroups[0].accountId, "bank-bca");
+  assert.strictEqual(mergedAlloc.nonCashGroups[0].amount, 900000);
+
+  // Skenario 3: Rekap lama tanpa mapping tetap fallback ke recap.bankAccountId
+  const legacyAlloc = resolveRecapChannelAllocations({
+    recap: { ...recap, bankAccountId: "bank-mandiri" },
+    mapping: null,
+    cashAccounts: accounts,
+  });
+  assert.strictEqual(legacyAlloc.nonCashGroups.length, 1);
+  assert.strictEqual(legacyAlloc.nonCashGroups[0].accountId, "bank-mandiri");
+});
+
+test("47b. resolvePaymentAccountId menghormati paymentAccountMapping POS sesuai metode bayar", () => {
+  const accounts: CashAccount[] = [
+    { id: "cash-main", name: "Laci Kasir", type: "CASH", isDefault: true },
+    { id: "bank-bca", name: "Bank BCA", type: "BANK", isDefault: false },
+    { id: "ewallet-qris", name: "Dompet QRIS", type: "E_WALLET", isDefault: false },
+  ];
+  const mapping = {
+    cash: "cash-main",
+    qris: "ewallet-qris",
+    edc: "bank-bca",
+    transfer: "bank-bca",
+  };
+
+  assert.strictEqual(resolvePaymentAccountId("QRIS", null, accounts, null, mapping), "ewallet-qris");
+  assert.strictEqual(resolvePaymentAccountId("DEBIT", null, accounts, null, mapping), "bank-bca");
+  assert.strictEqual(resolvePaymentAccountId("TRANSFER", null, accounts, null, mapping), "bank-bca");
+  assert.strictEqual(resolvePaymentAccountId("CASH", null, accounts, null, mapping), "cash-main");
+});
+
+test("47c. Akun yang menjadi tujuan default paymentAccountMapping dilarang dihapus meski 0 transaksi", () => {
+  const mainCash: CashAccount = { id: "cash-main", name: "Laci Kasir", type: "CASH", isDefault: true };
+  const primaryBank: CashAccount = { id: "bank-bca", name: "Bank BCA", type: "BANK", isDefault: false };
+  const walletQris: CashAccount = { id: "ewallet-qris", name: "Dompet QRIS", type: "E_WALLET", isDefault: false };
+  const accounts = [mainCash, primaryBank, walletQris];
+  const mapping = { qris: "ewallet-qris" };
+
+  const mappedProt = evaluateCashAccountProtection(walletQris, accounts, [], [], mapping);
+  assert.strictEqual(mappedProt.canDelete, false);
+  assert.deepStrictEqual(mappedProt.mappedPaymentChannels, ["QRIS"]);
+
+  // Setelah mapping dipindahkan dari ewallet-qris, akun kosong itu boleh dihapus lagi
+  const unmappedProt = evaluateCashAccountProtection(walletQris, accounts, [], [], { qris: "bank-bca" });
+  assert.strictEqual(unmappedProt.canDelete, true);
+
+  // Sync guard juga melindungi akun yang masih terdaftar di paymentAccountMapping
+  const synced = protectCashAccountsOnSync([mainCash, primaryBank], accounts, [], [], mapping);
+  assert.ok(synced.some((a) => a.id === "ewallet-qris"));
 });
 
 // -------------------------------------------------------------

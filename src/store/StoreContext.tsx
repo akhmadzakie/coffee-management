@@ -57,6 +57,7 @@ import {
   isCoreExpenseCategory,
   sanitizeCoreExpenseCategoryUpdate,
 } from "../utils/systemGuards";
+import { resolveRecapChannelAllocations } from "../utils/paymentRouting";
 import { calculateCashFlowHppSync, resolveOrderItemIngredients } from "../utils/posDomainLogic";
 import { getLocalDateString, getLocalPeriodString } from "../utils/dateUtils";
 import { syncAttendanceRecordsWithDaily } from "../utils/attendanceRecap";
@@ -2591,7 +2592,8 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         prevAcc,
         cashAccounts,
         cashTransactions,
-        dailySalesRecaps
+        dailySalesRecaps,
+        settings.paymentAccountMapping
       );
       if (!protection.canChangeType) {
         safeAcc = {
@@ -2618,7 +2620,8 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       targetAcc,
       cashAccounts,
       cashTransactions,
-      dailySalesRecaps
+      dailySalesRecaps,
+      settings.paymentAccountMapping
     );
     if (!protection.canDelete) return;
     const { updatedAccounts, updatedTransactions, transactionsChanged } =
@@ -3741,29 +3744,26 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       ref === recapId ||
       ref === `recap-cash:${recapId}` ||
       ref === `recap-noncash:${recapId}` ||
+      ref.startsWith(`recap-noncash:${recapId}:`) ||
       ref === `recap-mdr:${recapId}`
     );
   };
 
   const buildRecapCashTransactions = (recap: DailySalesRecap): CashTransaction[] => {
     const entries: CashTransaction[] = [];
-    const cashAcc =
-      (recap.cashAccountId && cashAccounts.find((a) => a.id === recap.cashAccountId)) ||
-      cashAccounts.find((a) => a.type === "CASH") ||
-      cashAccounts[0];
-    const bankAcc =
-      (recap.bankAccountId && cashAccounts.find((a) => a.id === recap.bankAccountId)) ||
-      cashAccounts.find((a) => a.type === "BANK") ||
-      cashAccounts[0];
     const actor = recap.recordedBy || currentUser?.name || "Finance";
+    const allocations = resolveRecapChannelAllocations({
+      recap,
+      mapping: settings.paymentAccountMapping,
+      cashAccounts,
+    });
 
-    const cashAmt = Math.round(Number(recap.cashAmount) || 0);
-    if (cashAmt > 0 && cashAcc) {
+    if (allocations.cashAmount > 0 && allocations.cashAccountId) {
       entries.push({
         id: generateId(),
-        accountId: cashAcc.id,
+        accountId: allocations.cashAccountId,
         type: "CASH_IN",
-        amount: cashAmt,
+        amount: allocations.cashAmount,
         category: "Penjualan Menu & Kasir",
         categoryId: "cat-penjualan",
         description: `Omzet Penjualan Tunai (${recap.date})${recap.notes ? ` - ${recap.notes}` : ""}`,
@@ -3774,43 +3774,35 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       });
     }
 
-    const qris = Math.round(Number(recap.qrisAmount) || 0);
-    const edc = Math.round(Number(recap.edcAmount) || 0);
-    const transfer = Math.round(Number(recap.transferAmount) || 0);
-    const online = Math.round(Number(recap.onlineDeliveryAmount) || 0);
-    const nonCashTotal = qris + edc + transfer + online;
     const settlementStatus = recap.nonCashSettlementStatus || "SETTLED";
-
-    if (nonCashTotal > 0 && bankAcc && settlementStatus === "SETTLED") {
-      const parts = [
-        qris > 0 ? `QRIS: ${qris.toLocaleString("id-ID")}` : null,
-        edc > 0 ? `EDC: ${edc.toLocaleString("id-ID")}` : null,
-        transfer > 0 ? `Transfer: ${transfer.toLocaleString("id-ID")}` : null,
-        online > 0 ? `Ojol: ${online.toLocaleString("id-ID")}` : null,
-      ]
-        .filter(Boolean)
-        .join(", ");
+    if (allocations.nonCashGroups.length > 0 && settlementStatus === "SETTLED") {
       const settleDate = recap.nonCashSettledAt || recap.date;
+      const isSingleGroup = allocations.nonCashGroups.length === 1;
 
-      entries.push({
-        id: generateId(),
-        accountId: bankAcc.id,
-        type: "CASH_IN",
-        amount: nonCashTotal,
-        category: "Penjualan Menu & Kasir",
-        categoryId: "cat-penjualan",
-        description: `Omzet Non-Tunai (${parts}) - ${recap.date}`,
-        date: settleDate,
-        referenceId: `recap-noncash:${recap.id}`,
-        paymentMethod: "Non-Tunai / Bank",
-        createdBy: actor,
-      });
-
-      const mdrFee = Math.round(Number(recap.mdrFeeAmount) || 0);
-      if (mdrFee > 0) {
+      for (const group of allocations.nonCashGroups) {
+        const refId = isSingleGroup
+          ? `recap-noncash:${recap.id}`
+          : `recap-noncash:${recap.id}:${group.accountId}`;
         entries.push({
           id: generateId(),
-          accountId: bankAcc.id,
+          accountId: group.accountId,
+          type: "CASH_IN",
+          amount: group.amount,
+          category: "Penjualan Menu & Kasir",
+          categoryId: "cat-penjualan",
+          description: `Omzet Non-Tunai (${group.descriptionParts.join(", ")}) - ${recap.date}`,
+          date: settleDate,
+          referenceId: refId,
+          paymentMethod: "Non-Tunai / Bank",
+          createdBy: actor,
+        });
+      }
+
+      const mdrFee = Math.round(Number(recap.mdrFeeAmount) || 0);
+      if (mdrFee > 0 && allocations.mdrAccountId) {
+        entries.push({
+          id: generateId(),
+          accountId: allocations.mdrAccountId,
           type: "CASH_OUT",
           amount: mdrFee,
           category: "Biaya Admin Bank & Pajak",

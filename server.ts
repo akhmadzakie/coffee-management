@@ -77,6 +77,7 @@ import {
   protectCoreExpenseCategoriesOnSync,
   protectCashAccountsOnSync,
 } from "./src/utils/systemGuards.ts";
+import { sanitizePaymentAccountMapping } from "./src/utils/paymentRouting.ts";
 
 const initialSettings = {
   id: "1",
@@ -1271,6 +1272,13 @@ async function startServer() {
     ) {
       divTarget.__ingredientCategoryDivisions = st.ingredientCategoryDivisions;
     }
+    if (
+      st?.paymentAccountMapping &&
+      typeof st.paymentAccountMapping === "object" &&
+      !Array.isArray(st.paymentAccountMapping)
+    ) {
+      divTarget.__paymentAccountMapping = sanitizePaymentAccountMapping(st.paymentAccountMapping);
+    }
     if (st?.menuCategories && typeof st.menuCategories === "object" && !Array.isArray(st.menuCategories)) {
       divTarget.__menuCategories = st.menuCategories;
     }
@@ -2009,6 +2017,10 @@ async function startServer() {
             ? rawDivObj.__ingredientCategoryDivisions
             : rawSettings?.ingredientCategoryDivisions;
         delete rawDivObj.__ingredientCategoryDivisions;
+        const offPaymentAccountMapping = sanitizePaymentAccountMapping(
+          rawDivObj.__paymentAccountMapping || rawSettings?.paymentAccountMapping
+        );
+        delete rawDivObj.__paymentAccountMapping;
         const offlineCleaningMeta = extractCleaningMetaFromSettings({
           divisionKpiBonusTarget: rawDivObj,
           autoSeedDisabled: rawSettings?.autoSeedDisabled,
@@ -2035,6 +2047,9 @@ async function startServer() {
             gemini_api_key: isSuperAdminRole ? effectiveApiKey : "",
             posSupervisorPin: isPrivilegedRole ? (rawSettings?.posSupervisorPin || "1234") : "",
             ...(offIngCatDivisions ? { ingredientCategoryDivisions: offIngCatDivisions } : {}),
+            ...(Object.keys(offPaymentAccountMapping).length > 0
+              ? { paymentAccountMapping: offPaymentAccountMapping }
+              : {}),
             profitShareOwnerPercent: profitShareCfg.ownerPercent,
             profitShareReservePercent: profitShareCfg.reservePercent,
             profitShareInvestorPercent: profitShareCfg.investorPercent,
@@ -2339,6 +2354,11 @@ async function startServer() {
                 : undefined);
       delete rawDivTarget.__ingredientCategoryDivisions;
 
+      const paymentAccountMappingRaw =
+        rawDivTarget.__paymentAccountMapping || rawSettings.paymentAccountMapping;
+      const paymentAccountMapping = sanitizePaymentAccountMapping(paymentAccountMappingRaw);
+      delete rawDivTarget.__paymentAccountMapping;
+
       const menuCategories =
         rawDivTarget.__menuCategories &&
         typeof rawDivTarget.__menuCategories === "object" &&
@@ -2418,6 +2438,7 @@ async function startServer() {
         shiftDefinitions: shiftDefs,
         ...(ingredientCategories ? { ingredientCategories } : {}),
         ...(ingredientCategoryDivisions ? { ingredientCategoryDivisions } : {}),
+        ...(Object.keys(paymentAccountMapping).length > 0 ? { paymentAccountMapping } : {}),
         ...(menuCategories ? { menuCategories } : {}),
         ...(defaultOverheadPercent !== undefined && !isNaN(defaultOverheadPercent)
           ? { defaultOverheadPercent }
@@ -3173,11 +3194,20 @@ async function startServer() {
           const existingDbRecaps = await tx
             .select({ bankAccountId: schema.dailySalesRecaps.bankAccountId })
             .from(schema.dailySalesRecaps);
+          const existingDivMap =
+            existingSettingsRow?.divisionKpiBonusTarget &&
+            typeof existingSettingsRow.divisionKpiBonusTarget === "object"
+              ? (existingSettingsRow.divisionKpiBonusTarget as Record<string, any>)
+              : {};
+          const existingPaymentMapping = sanitizePaymentAccountMapping(
+            existingDivMap.__paymentAccountMapping || settings?.paymentAccountMapping
+          );
           guardedCashAccounts = protectCashAccountsOnSync(
             cash_accounts,
             existingDbCashAccounts,
             existingDbCashTxs,
-            existingDbRecaps
+            existingDbRecaps,
+            existingPaymentMapping
           );
           await tx.delete(schema.cashAccounts);
         }
@@ -4851,11 +4881,20 @@ ${
   ): string => {
     offlineState.cash_accounts = offlineState.cash_accounts || [];
     const shift = shiftId ? (offlineState.shifts || []).find((s: any) => s.id === shiftId) : null;
+    const rawOffDiv =
+      offlineState?.settings?.divisionKpiBonusTarget &&
+      typeof offlineState.settings.divisionKpiBonusTarget === "object"
+        ? offlineState.settings.divisionKpiBonusTarget
+        : {};
+    const offPaymentMapping = sanitizePaymentAccountMapping(
+      rawOffDiv.__paymentAccountMapping || offlineState?.settings?.paymentAccountMapping
+    );
     const resolved = resolvePaymentAccountId(
       paymentMethod,
       requestedAccountId,
       offlineState.cash_accounts,
-      shift?.cashAccountId
+      shift?.cashAccountId,
+      offPaymentMapping
     );
     if (resolved) return resolved;
 
@@ -4898,7 +4937,19 @@ ${
       const shRows = await tx.select().from(schema.shifts).where(eq(schema.shifts.id, shiftId)).limit(1);
       shiftCashAccId = shRows[0]?.cashAccountId || null;
     }
-    const resolved = resolvePaymentAccountId(paymentMethod, requestedAccountId, accounts, shiftCashAccId);
+    const stRows = await tx.select().from(schema.settings).limit(1);
+    const rawDbDiv =
+      stRows[0]?.divisionKpiBonusTarget && typeof stRows[0].divisionKpiBonusTarget === "object"
+        ? (stRows[0].divisionKpiBonusTarget as Record<string, any>)
+        : {};
+    const dbPaymentMapping = sanitizePaymentAccountMapping(rawDbDiv.__paymentAccountMapping);
+    const resolved = resolvePaymentAccountId(
+      paymentMethod,
+      requestedAccountId,
+      accounts,
+      shiftCashAccId,
+      dbPaymentMapping
+    );
     if (resolved) return resolved;
 
     const method = String(paymentMethod || "CASH").toUpperCase();

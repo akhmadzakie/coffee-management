@@ -127,6 +127,7 @@ const formatUnitCost = (value: number): string => {
 export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
   const {
     currentUser,
+    settings,
     cashTransactions,
     addCashTransaction,
     updateCashTransaction,
@@ -1440,7 +1441,8 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
         editingAccount,
         cashAccounts,
         cashTransactions,
-        dailySalesRecaps
+        dailySalesRecaps,
+        settings?.paymentAccountMapping
       );
       updateCashAccount({
         ...editingAccount,
@@ -2067,7 +2069,8 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
                   acc,
                   cashAccounts,
                   cashTransactions,
-                  dailySalesRecaps
+                  dailySalesRecaps,
+                  settings?.paymentAccountMapping
                 );
                 return (
                   <div
@@ -4098,7 +4101,8 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
                               editingAccount,
                               cashAccounts,
                               cashTransactions,
-                              dailySalesRecaps
+                              dailySalesRecaps,
+                              settings?.paymentAccountMapping
                             )
                           : null;
                         const isTypeLocked = Boolean(editProt && !editProt.canChangeType);

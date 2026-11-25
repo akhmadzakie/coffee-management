@@ -352,6 +352,21 @@ export const DEFAULT_SHIFT_DEFINITIONS: ShiftDefinition[] = [
   { id: "SORE", name: "Sore (Closing)", startTime: "15:00", endTime: "23:00", workHours: 8, lateToleranceMinutes: 15, color: "amber", isActive: true },
 ];
 
+export type PaymentAccountChannel =
+  | "cash"
+  | "qris"
+  | "edc"
+  | "transfer"
+  | "onlineDelivery";
+
+export interface PaymentAccountMapping {
+  cash?: string | null;
+  qris?: string | null;
+  edc?: string | null;
+  transfer?: string | null;
+  onlineDelivery?: string | null;
+}
+
 export interface Settings {
   id?: string;
   logoDataUrl: string | null;
@@ -393,6 +408,7 @@ export interface Settings {
   posSupervisorPin?: string;
   hasPosSupervisorPin?: boolean;
   autoDeductStockOnSale?: boolean;
+  paymentAccountMapping?: PaymentAccountMapping;
   allowNegativeStockSale?: boolean;
   ingredientCategories?: string[];
   ingredientCategoryDivisions?: Record<string, IngredientCategoryDivision>;
@@ -493,6 +509,10 @@ export interface DailySalesRecap {
   totalAmount: number;
   cashAccountId?: string | null;
   bankAccountId?: string | null;
+  qrisAccountId?: string | null;
+  edcAccountId?: string | null;
+  transferAccountId?: string | null;
+  onlineDeliveryAccountId?: string | null;
   nonCashSettlementStatus?: "SETTLED" | "PENDING";
   nonCashSettledAt?: string | null;
   notes?: string;

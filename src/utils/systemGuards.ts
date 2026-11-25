@@ -1,6 +1,13 @@
 import { CORE_EXPENSE_CATEGORY_IDS } from "./dataCleaning";
 import { normalizeIngredientCategoryName } from "./financeMetrics";
-import { CashAccount, CashTransaction, DailySalesRecap, ExpenseCategory } from "../types";
+import { getMappedChannelsForAccount } from "./paymentRouting";
+import {
+  CashAccount,
+  CashTransaction,
+  DailySalesRecap,
+  ExpenseCategory,
+  PaymentAccountMapping,
+} from "../types";
 
 export type CriticalIngredientRole = "OLAHAN" | "PACKAGING" | "FALLBACK";
 
@@ -9,6 +16,7 @@ export interface CashAccountProtection {
   isOnlyBankAccount: boolean;
   linkedTxCount: number;
   linkedRecapCount: number;
+  mappedPaymentChannels: string[];
   balance: number;
   canDelete: boolean;
   deleteBlockReason?: string;
@@ -186,12 +194,17 @@ export function evaluateCashAccountProtection(
   account: CashAccount,
   allAccounts: CashAccount[],
   cashTransactions: CashTransaction[],
-  dailySalesRecaps: Pick<DailySalesRecap, "bankAccountId">[] = []
+  dailySalesRecaps: Pick<DailySalesRecap, "bankAccountId">[] = [],
+  paymentAccountMapping?: PaymentAccountMapping | null
 ): CashAccountProtection {
   const isDefaultCash =
     Boolean(account.isDefault) || account.id === "cash-drawer-main";
   const bankCount = allAccounts.filter((a) => a.type === "BANK").length;
   const isOnlyBankAccount = account.type === "BANK" && bankCount <= 1;
+  const mappedPaymentChannels = getMappedChannelsForAccount(
+    account.id,
+    paymentAccountMapping
+  );
 
   let linkedTxCount = 0;
   let balance = 0;
@@ -222,6 +235,9 @@ export function evaluateCashAccountProtection(
     canDelete = false;
     deleteBlockReason =
       "Minimal harus ada 1 Rekening Bank aktif karena terhubung otomatis ke Rekap Penjualan (QRIS/EDC/Ojol) & Setor Kas. Anda tetap dapat mengubah namanya.";
+  } else if (mappedPaymentChannels.length > 0) {
+    canDelete = false;
+    deleteBlockReason = `Rekening ini sedang dipasang sebagai tujuan default metode pembayaran (${mappedPaymentChannels.join(", ")}). Pindahkan dulu default-nya di Pengaturan jika ingin menghapus (tetap boleh ubah nama).`;
   } else if (linkedRecapCount > 0) {
     canDelete = false;
     deleteBlockReason = `Rekening ini terhubung ke ${linkedRecapCount} Rekap Penjualan (termasuk pencairan non-tunai) sehingga tidak dapat dihapus. Anda tetap dapat mengubah namanya.`;
@@ -244,6 +260,9 @@ export function evaluateCashAccountProtection(
     canChangeType = false;
     typeLockReason =
       "Jenis Rekening Bank utama dikunci sebagai BANK agar Rekap Penjualan & pencairan non-tunai selalu memiliki rekening tujuan.";
+  } else if (mappedPaymentChannels.length > 0) {
+    canChangeType = false;
+    typeLockReason = `Jenis rekening dikunci karena menjadi tujuan default (${mappedPaymentChannels.join(", ")}). Nama rekening tetap dapat diubah.`;
   } else if (linkedRecapCount > 0) {
     canChangeType = false;
     typeLockReason =
@@ -261,6 +280,7 @@ export function evaluateCashAccountProtection(
     isOnlyBankAccount,
     linkedTxCount,
     linkedRecapCount,
+    mappedPaymentChannels,
     balance,
     canDelete,
     deleteBlockReason,
@@ -271,7 +291,7 @@ export function evaluateCashAccountProtection(
 
 /**
  * Penjaga sisi server saat `/api/sync` untuk `cash_accounts`:
- * - Mencegah penghapusan Pos Kas Utama, rekening bank terakhir, rekening yang tertaut Rekap Penjualan, maupun akun dengan transaksi di DB.
+ * - Mencegah penghapusan Pos Kas Utama, rekening bank terakhir, rekening tujuan default metode bayar, rekening yang tertaut Rekap Penjualan, maupun akun dengan transaksi di DB.
  * - Mengunci `type` (dan `isDefault` kas utama) sesuai DB jika terproteksi, sambil mengizinkan rename `name`.
  */
 export function protectCashAccountsOnSync<
@@ -280,7 +300,8 @@ export function protectCashAccountsOnSync<
   incoming: T[],
   existingDb: T[],
   existingTxDb: Array<{ accountId?: string | null }>,
-  existingRecapsDb: Array<{ bankAccountId?: string | null }> = []
+  existingRecapsDb: Array<{ bankAccountId?: string | null }> = [],
+  paymentAccountMapping?: PaymentAccountMapping | null
 ): T[] {
   const txCountByAccount = new Map<string, number>();
   for (const tx of existingTxDb) {
@@ -296,6 +317,13 @@ export function protectCashAccountsOnSync<
     recapCountByAccount.set(bankId, (recapCountByAccount.get(bankId) || 0) + 1);
   }
 
+  const mappedAccountIds = new Set<string>();
+  if (paymentAccountMapping) {
+    for (const val of Object.values(paymentAccountMapping)) {
+      if (typeof val === "string" && val.trim()) mappedAccountIds.add(val.trim());
+    }
+  }
+
   const protectedExistingMap = new Map<string, T>();
   for (const acc of existingDb) {
     const id = String(acc?.id || "");
@@ -303,7 +331,8 @@ export function protectCashAccountsOnSync<
     const isDefaultCash = Boolean(acc.isDefault) || id === "cash-drawer-main";
     const hasTxs = (txCountByAccount.get(id) || 0) > 0;
     const hasRecaps = (recapCountByAccount.get(id) || 0) > 0;
-    if (isDefaultCash || hasTxs || hasRecaps) {
+    const isMapped = mappedAccountIds.has(id);
+    if (isDefaultCash || hasTxs || hasRecaps || isMapped) {
       protectedExistingMap.set(id, acc);
     }
   }

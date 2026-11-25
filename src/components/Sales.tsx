@@ -16,7 +16,12 @@ import {
   validateCashDepositSubmission,
 } from "../utils/syncSanitizers";
 import { getPreviousPeriodString } from "../utils/financeMetrics";
-import { DailySalesRecap } from "../types";
+import { DailySalesRecap, PaymentAccountMapping } from "../types";
+import {
+  PAYMENT_CHANNEL_DEFINITIONS,
+  resolveEffectivePaymentAccountMapping,
+} from "../utils/paymentRouting";
+import { PaymentAccountMappingForm } from "./common/PaymentAccountMappingForm";
 import {
   Search,
   FileSpreadsheet,
@@ -49,6 +54,7 @@ import {
   Edit2,
   ArrowLeftRight,
   Landmark,
+  SlidersHorizontal,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { formatCurrency } from "../utils/format";
@@ -114,6 +120,7 @@ export const Sales = () => {
     addCashTransaction,
     currentUser,
     settings,
+    updateSettings,
     products,
     recipes,
     ingredients,
@@ -140,15 +147,32 @@ export const Sales = () => {
     message: string;
   } | null>(null);
 
-  const defaultCashAccountId =
-    cashAccounts.find((a) => a.type === "CASH")?.id || cashAccounts[0]?.id || "";
+  const effectivePaymentMapping = useMemo(
+    () =>
+      resolveEffectivePaymentAccountMapping(
+        settings?.paymentAccountMapping,
+        cashAccounts
+      ),
+    [settings?.paymentAccountMapping, cashAccounts]
+  );
+  const defaultCashAccountId = effectivePaymentMapping.cash;
   const defaultBankAccountId =
-    cashAccounts.find((a) => a.type === "BANK")?.id || cashAccounts[0]?.id || "";
+    effectivePaymentMapping.qris ||
+    effectivePaymentMapping.transfer ||
+    cashAccounts.find((a) => a.type === "BANK")?.id ||
+    cashAccounts[0]?.id ||
+    "";
+
+  // Modal pengaturan rekening default per metode pembayaran
+  const [isPaymentMappingOpen, setIsPaymentMappingOpen] = useState(false);
+  const [draftPaymentMapping, setDraftPaymentMapping] =
+    useState<PaymentAccountMapping>({});
 
   // State untuk Input / Edit Omzet Harian
   const [isAddRecapOpen, setIsAddRecapOpen] = useState(false);
   const [editingRecapId, setEditingRecapId] = useState<string | null>(null);
   const [showOptionalRecapFields, setShowOptionalRecapFields] = useState(false);
+  const [showChannelOverrides, setShowChannelOverrides] = useState(false);
   const [recapForm, setRecapForm] = useState({
     date: getLocalDateString(),
     shift: "ALL" as "ALL" | "PAGI" | "MIDDLE" | "SORE" | "MALAM",
@@ -162,6 +186,10 @@ export const Sales = () => {
     mdrFeeAmount: "",
     cashAccountId: "",
     bankAccountId: "",
+    qrisAccountId: "",
+    edcAccountId: "",
+    transferAccountId: "",
+    onlineDeliveryAccountId: "",
     nonCashSettlementStatus: "SETTLED" as "SETTLED" | "PENDING",
     notes: "",
   });
@@ -293,6 +321,7 @@ export const Sales = () => {
     if (isReadOnly) return;
     setEditingRecapId(null);
     setShowOptionalRecapFields(false);
+    setShowChannelOverrides(false);
     setRecapForm({
       date: getLocalDateString(),
       shift: "ALL",
@@ -304,8 +333,12 @@ export const Sales = () => {
       discountAmount: "",
       refundAmount: "",
       mdrFeeAmount: "",
-      cashAccountId: defaultCashAccountId,
-      bankAccountId: defaultBankAccountId,
+      cashAccountId: effectivePaymentMapping.cash,
+      bankAccountId: effectivePaymentMapping.qris || defaultBankAccountId,
+      qrisAccountId: effectivePaymentMapping.qris,
+      edcAccountId: effectivePaymentMapping.edc,
+      transferAccountId: effectivePaymentMapping.transfer,
+      onlineDeliveryAccountId: effectivePaymentMapping.onlineDelivery,
       nonCashSettlementStatus: "SETTLED",
       notes: "",
     });
@@ -327,6 +360,14 @@ export const Sales = () => {
       Boolean(item.mdrFeeAmount) ||
       item.nonCashSettlementStatus === "PENDING";
     setShowOptionalRecapFields(hasOptional);
+    const hasCustomChannel = Boolean(
+      item.qrisAccountId ||
+        item.edcAccountId ||
+        item.transferAccountId ||
+        item.onlineDeliveryAccountId
+    );
+    setShowChannelOverrides(hasCustomChannel);
+    const legacyFallback = item.bankAccountId || defaultBankAccountId;
     setRecapForm({
       date: item.date,
       shift: (item.shift as any) || "ALL",
@@ -338,8 +379,13 @@ export const Sales = () => {
       discountAmount: item.discountAmount ? String(item.discountAmount) : "",
       refundAmount: item.refundAmount ? String(item.refundAmount) : "",
       mdrFeeAmount: item.mdrFeeAmount ? String(item.mdrFeeAmount) : "",
-      cashAccountId: item.cashAccountId || defaultCashAccountId,
-      bankAccountId: item.bankAccountId || defaultBankAccountId,
+      cashAccountId: item.cashAccountId || effectivePaymentMapping.cash,
+      bankAccountId: legacyFallback,
+      qrisAccountId: item.qrisAccountId || settings?.paymentAccountMapping?.qris || legacyFallback,
+      edcAccountId: item.edcAccountId || settings?.paymentAccountMapping?.edc || legacyFallback,
+      transferAccountId: item.transferAccountId || settings?.paymentAccountMapping?.transfer || legacyFallback,
+      onlineDeliveryAccountId:
+        item.onlineDeliveryAccountId || settings?.paymentAccountMapping?.onlineDelivery || legacyFallback,
       nonCashSettlementStatus: item.nonCashSettlementStatus || "SETTLED",
       notes: item.notes || "",
     });
@@ -364,8 +410,14 @@ export const Sales = () => {
 
   const openDepositModal = () => {
     if (isReadOnly) return;
-    const firstCash = cashAccounts.find((a) => a.type === "CASH")?.id || cashAccounts[0]?.id || "";
+    const firstCash = effectivePaymentMapping.cash || cashAccounts.find((a) => a.type === "CASH")?.id || cashAccounts[0]?.id || "";
     const firstBank =
+      (effectivePaymentMapping.transfer && effectivePaymentMapping.transfer !== firstCash
+        ? effectivePaymentMapping.transfer
+        : "") ||
+      (effectivePaymentMapping.qris && effectivePaymentMapping.qris !== firstCash
+        ? effectivePaymentMapping.qris
+        : "") ||
       cashAccounts.find((a) => a.type === "BANK" && a.id !== firstCash)?.id ||
       cashAccounts.find((a) => a.id !== firstCash)?.id ||
       firstCash;
@@ -453,7 +505,11 @@ export const Sales = () => {
       mdrFeeAmount: validation.mdrFeeAmount,
       totalAmount: validation.totalAmount,
       cashAccountId: recapForm.cashAccountId || defaultCashAccountId || null,
-      bankAccountId: recapForm.bankAccountId || defaultBankAccountId || null,
+      bankAccountId: recapForm.qrisAccountId || recapForm.bankAccountId || defaultBankAccountId || null,
+      qrisAccountId: recapForm.qrisAccountId || null,
+      edcAccountId: recapForm.edcAccountId || null,
+      transferAccountId: recapForm.transferAccountId || null,
+      onlineDeliveryAccountId: recapForm.onlineDeliveryAccountId || null,
       nonCashSettlementStatus:
         validation.nonCashTotal > 0 ? recapForm.nonCashSettlementStatus : "SETTLED",
       notes: recapForm.notes.trim() || undefined,
@@ -1630,6 +1686,18 @@ export const Sales = () => {
 
               {!isReadOnly && (
                 <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDraftPaymentMapping(settings?.paymentAccountMapping || {});
+                      setIsPaymentMappingOpen(true);
+                    }}
+                    className="whitespace-nowrap shrink-0 flex items-center justify-center gap-2 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-100 border border-slate-200 dark:border-slate-700 rounded-xl font-bold text-xs transition cursor-pointer"
+                    title="Atur rekening tujuan default untuk Tunai, QRIS, EDC, Transfer, & Ojol"
+                  >
+                    <SlidersHorizontal className="w-3.5 h-3.5 text-brand-600 dark:text-brand-300 shrink-0" />
+                    <span>Atur Rekening Default</span>
+                  </button>
                   <button
                     type="button"
                     onClick={openDepositModal}
@@ -3076,38 +3144,151 @@ export const Sales = () => {
                         </div>
                       </div>
 
-                      {/* Pilihan Pos Kas & Rekening Bank Tujuan */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3.5 rounded-2xl bg-slate-50/90 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700">
-                        <div>
-                          <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
-                            Pos Kas Tujuan (Tunai)
-                          </label>
-                          <CustomSelect
-                            value={recapForm.cashAccountId || defaultCashAccountId}
-                            onChange={(val) => setRecapForm({ ...recapForm, cashAccountId: val })}
-                            options={cashAccounts.map((acc) => ({
-                              value: acc.id,
-                              label: `${acc.name} (${acc.type})`,
-                            }))}
-                            placeholder="Pilih Pos Kas"
-                            buttonClassName="w-full py-2 px-3 text-xs bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700"
-                          />
+                      {/* Ringkasan & Override Tujuan Rekening per Metode Pembayaran */}
+                      <div className="p-3.5 rounded-2xl bg-slate-50/90 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700 space-y-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div>
+                            <p className="text-xs font-bold text-slate-800 dark:text-slate-100">
+                              Rekening Tujuan per Metode Pembayaran
+                            </p>
+                            <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                              Terisi otomatis sesuai Pengaturan Rekening Default.
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setShowChannelOverrides((prev) => !prev)}
+                              className="px-2.5 py-1 rounded-xl text-[11px] font-bold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:border-brand-300 transition cursor-pointer"
+                            >
+                              {showChannelOverrides ? "Ringkas" : "Ubah per Metode"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setDraftPaymentMapping(settings?.paymentAccountMapping || {});
+                                setIsPaymentMappingOpen(true);
+                              }}
+                              className="px-2.5 py-1 rounded-xl text-[11px] font-bold bg-brand-50 dark:bg-brand-500/15 border border-brand-200 dark:border-brand-500/30 text-brand-700 dark:text-brand-300 hover:bg-brand-100 transition cursor-pointer"
+                            >
+                              Atur Default
+                            </button>
+                          </div>
                         </div>
-                        <div>
-                          <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
-                            Rekening Bank Tujuan (Non-Tunai &amp; Ojol)
-                          </label>
-                          <CustomSelect
-                            value={recapForm.bankAccountId || defaultBankAccountId}
-                            onChange={(val) => setRecapForm({ ...recapForm, bankAccountId: val })}
-                            options={cashAccounts.map((acc) => ({
-                              value: acc.id,
-                              label: `${acc.name} (${acc.type})`,
-                            }))}
-                            placeholder="Pilih Rekening Bank"
-                            buttonClassName="w-full py-2 px-3 text-xs bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700"
-                          />
-                        </div>
+
+                        {!showChannelOverrides ? (
+                          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                            {PAYMENT_CHANNEL_DEFINITIONS.map((ch) => {
+                              const formKey =
+                                ch.key === "cash"
+                                  ? recapForm.cashAccountId
+                                  : ch.key === "qris"
+                                  ? recapForm.qrisAccountId
+                                  : ch.key === "edc"
+                                  ? recapForm.edcAccountId
+                                  : ch.key === "transfer"
+                                  ? recapForm.transferAccountId
+                                  : recapForm.onlineDeliveryAccountId;
+                              const resolvedId = formKey || effectivePaymentMapping[ch.key];
+                              const accObj = cashAccounts.find((a) => a.id === resolvedId);
+                              return (
+                                <div
+                                  key={ch.key}
+                                  className="px-2.5 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-700"
+                                >
+                                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                                    {ch.shortLabel}
+                                  </span>
+                                  <span className="text-[11px] font-bold text-slate-800 dark:text-slate-100 truncate block mt-0.5">
+                                    {accObj?.name || "Belum dipilih"}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                            <div>
+                              <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                                Tunai → Pos Kas
+                              </label>
+                              <CustomSelect
+                                value={recapForm.cashAccountId || defaultCashAccountId}
+                                onChange={(val) => setRecapForm({ ...recapForm, cashAccountId: val })}
+                                options={cashAccounts.map((acc) => ({
+                                  value: acc.id,
+                                  label: `${acc.name} (${acc.type})`,
+                                }))}
+                                placeholder="Pilih Pos Kas"
+                                buttonClassName="w-full py-2 px-3 text-xs bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                                QRIS → Rekening Tujuan
+                              </label>
+                              <CustomSelect
+                                value={recapForm.qrisAccountId || effectivePaymentMapping.qris}
+                                onChange={(val) =>
+                                  setRecapForm({ ...recapForm, qrisAccountId: val, bankAccountId: val })
+                                }
+                                options={cashAccounts.map((acc) => ({
+                                  value: acc.id,
+                                  label: `${acc.name} (${acc.type})`,
+                                }))}
+                                placeholder="Pilih Rekening QRIS"
+                                buttonClassName="w-full py-2 px-3 text-xs bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                                EDC / Debit / Kredit → Rekening
+                              </label>
+                              <CustomSelect
+                                value={recapForm.edcAccountId || effectivePaymentMapping.edc}
+                                onChange={(val) => setRecapForm({ ...recapForm, edcAccountId: val })}
+                                options={cashAccounts.map((acc) => ({
+                                  value: acc.id,
+                                  label: `${acc.name} (${acc.type})`,
+                                }))}
+                                placeholder="Pilih Rekening EDC"
+                                buttonClassName="w-full py-2 px-3 text-xs bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                                Transfer Bank → Rekening
+                              </label>
+                              <CustomSelect
+                                value={recapForm.transferAccountId || effectivePaymentMapping.transfer}
+                                onChange={(val) => setRecapForm({ ...recapForm, transferAccountId: val })}
+                                options={cashAccounts.map((acc) => ({
+                                  value: acc.id,
+                                  label: `${acc.name} (${acc.type})`,
+                                }))}
+                                placeholder="Pilih Rekening Transfer"
+                                buttonClassName="w-full py-2 px-3 text-xs bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700"
+                              />
+                            </div>
+                            <div className="sm:col-span-2">
+                              <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                                Online / Ojol (GoFood, GrabFood, ShopeeFood) → Rekening
+                              </label>
+                              <CustomSelect
+                                value={recapForm.onlineDeliveryAccountId || effectivePaymentMapping.onlineDelivery}
+                                onChange={(val) =>
+                                  setRecapForm({ ...recapForm, onlineDeliveryAccountId: val })
+                                }
+                                options={cashAccounts.map((acc) => ({
+                                  value: acc.id,
+                                  label: `${acc.name} (${acc.type})`,
+                                }))}
+                                placeholder="Pilih Rekening Ojol"
+                                buttonClassName="w-full py-2 px-3 text-xs bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700"
+                              />
+                            </div>
+                          </div>
+                        )}
                       </div>
 
                       {/* Bagian Opsional: Diskon, Refund, MDR & Settlement H+1 */}
@@ -3590,6 +3771,109 @@ export const Sales = () => {
         }}
         onCancel={() => setConfirmDeleteRecap(null)}
       />
+
+      {/* ── MODAL PENGATURAN REKENING DEFAULT METODE PEMBAYARAN ──────────── */}
+      {typeof document !== "undefined" &&
+        createPortal(
+          <AnimatePresence>
+            {isPaymentMappingOpen && (
+              <motion.div
+                key="sales-payment-mapping-backdrop"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.18, ease: "easeOut" }}
+                onClick={(e) => {
+                  if (e.target === e.currentTarget) setIsPaymentMappingOpen(false);
+                }}
+                className="fixed inset-0 z-[120] bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto"
+              >
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.96, y: 10 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.96, y: 8 }}
+                  transition={{ type: "spring", damping: 28, stiffness: 360 }}
+                  className="bg-white dark:bg-slate-900 w-full max-w-2xl rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden my-auto max-h-[90dvh] flex flex-col"
+                >
+                  <div className="shrink-0 p-5 border-b border-slate-100 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-800/60 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-2xl bg-brand-50 dark:bg-brand-500/20 border border-brand-200 dark:border-brand-500/30 flex items-center justify-center text-brand-700 dark:text-brand-300 shrink-0">
+                        <SlidersHorizontal className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100">
+                          Pengaturan Rekening Default Metode Pembayaran
+                        </h3>
+                        <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400">
+                          Berlaku otomatis saat mencatat Rekap Omzet Harian &amp; transaksi POS kasir.
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setIsPaymentMappingOpen(false)}
+                      className="p-2 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-slate-800 transition cursor-pointer"
+                      aria-label="Tutup pengaturan rekening default"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+
+                  <div className="flex-1 overflow-y-auto custom-scrollbar p-5">
+                    <PaymentAccountMappingForm
+                      value={draftPaymentMapping}
+                      cashAccounts={cashAccounts}
+                      disabled={isReadOnly}
+                      onChange={setDraftPaymentMapping}
+                    />
+                  </div>
+
+                  <div className="shrink-0 px-5 py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/90 dark:bg-slate-800/70 flex flex-wrap items-center justify-end gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => setIsPaymentMappingOpen(false)}
+                      className="px-4 py-2 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+                    >
+                      Batal
+                    </button>
+                    {!isReadOnly && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          updateSettings({
+                            ...settings,
+                            paymentAccountMapping: draftPaymentMapping,
+                          });
+                          const eff = resolveEffectivePaymentAccountMapping(
+                            draftPaymentMapping,
+                            cashAccounts
+                          );
+                          setRecapForm((prev) => ({
+                            ...prev,
+                            cashAccountId: eff.cash,
+                            bankAccountId: eff.qris || eff.transfer || prev.bankAccountId,
+                            qrisAccountId: eff.qris,
+                            edcAccountId: eff.edc,
+                            transferAccountId: eff.transfer,
+                            onlineDeliveryAccountId: eff.onlineDelivery,
+                          }));
+                          setIsPaymentMappingOpen(false);
+                          toast.success(
+                            "Rekening default per metode pembayaran berhasil disimpan!"
+                          );
+                        }}
+                        className="px-5 py-2 rounded-xl text-xs font-bold bg-brand-600 hover:bg-brand-700 active:scale-[0.98] text-white shadow-xs transition cursor-pointer"
+                      >
+                        Simpan Default
+                      </button>
+                    )}
+                  </div>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>,
+          document.body
+        )}
     </div>
   );
 };

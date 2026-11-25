@@ -28,10 +28,12 @@ import {
 import { ConnectedDevices } from "./ConnectedDevices";
 import { DataCleaningPanel } from "./DataCleaningPanel";
 import { CustomSelect } from "./common/CustomSelect";
+import { PaymentAccountMappingForm } from "./common/PaymentAccountMappingForm";
 import { DEFAULT_BRAND_LOGO_SETTING, isCustomBrandLogo, resolveBrandLogo } from "../utils/brandLogo";
+import type { PaymentAccountMapping } from "../types";
 
 export const SettingsComponent = () => {
-  const { settings, updateSettings, currentUser } = useStore();
+  const { settings, updateSettings, currentUser, cashAccounts } = useStore();
   const isSuperAdmin = currentUser?.role === "SUPER_ADMIN";
   const isManager = currentUser?.role === "MANAGER";
   const isOwner = currentUser?.role === "OWNER";
@@ -60,6 +62,9 @@ export const SettingsComponent = () => {
   const [profitShareOwnerPercent, setProfitShareOwnerPercent] = useState<number>(settings.profitShareOwnerPercent ?? 70);
   const [profitShareReservePercent, setProfitShareReservePercent] = useState<number>(settings.profitShareReservePercent ?? 30);
   const [profitShareInvestorPercent, setProfitShareInvestorPercent] = useState<number>(settings.profitShareInvestorPercent ?? 0);
+  const [paymentAccountMapping, setPaymentAccountMapping] = useState<PaymentAccountMapping>(
+    settings.paymentAccountMapping || {}
+  );
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
   const [hasEdited, setHasEdited] = useState(false);
 
@@ -84,6 +89,7 @@ export const SettingsComponent = () => {
     setProfitShareOwnerPercent(settings.profitShareOwnerPercent ?? 70);
     setProfitShareReservePercent(settings.profitShareReservePercent ?? 30);
     setProfitShareInvestorPercent(settings.profitShareInvestorPercent ?? 0);
+    setPaymentAccountMapping(settings.paymentAccountMapping || {});
   }, [settings, hasEdited]);
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -132,6 +138,7 @@ export const SettingsComponent = () => {
       profitShareOwnerPercent: canEditProfitShare ? ownerPct : (settings.profitShareOwnerPercent ?? 70),
       profitShareReservePercent: canEditProfitShare ? reservePct : (settings.profitShareReservePercent ?? 30),
       profitShareInvestorPercent: canEditProfitShare ? investorPct : (settings.profitShareInvestorPercent ?? 0),
+      paymentAccountMapping,
     });
     setHasEdited(false);
     const msg =
@@ -788,6 +795,35 @@ export const SettingsComponent = () => {
                     className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-xl text-sm font-mono tabular-nums text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none disabled:opacity-60 disabled:cursor-not-allowed"
                   />
                 </div>
+              </div>
+            </div>
+
+            {/* Rekening Default Rekap Omzet & Metode Pembayaran */}
+            <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-2xs space-y-4">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-brand-50 dark:bg-brand-500/15 border border-brand-200 dark:border-brand-500/30 flex items-center justify-center text-brand-700 dark:text-brand-300">
+                  <Store className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-slate-800 dark:text-slate-100">
+                    Rekening Default Rekap Omzet &amp; Metode Pembayaran
+                  </h4>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Tentukan Pos Kas atau Rekening Bank tujuan otomatis untuk setiap metode pembayaran di POS &amp; Rekap Omzet Harian.
+                  </p>
+                </div>
+              </div>
+
+              <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
+                <PaymentAccountMappingForm
+                  value={paymentAccountMapping}
+                  cashAccounts={cashAccounts}
+                  disabled={isOwner}
+                  onChange={(nextMapping) => {
+                    setHasEdited(true);
+                    setPaymentAccountMapping(nextMapping);
+                  }}
+                />
               </div>
             </div>
 {/* Otomatisasi & Kontrol Stok POS */}

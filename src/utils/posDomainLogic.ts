@@ -1,4 +1,11 @@
-import type { BatchPreparation, Ingredient, Product, Recipe } from "../types";
+import type {
+  BatchPreparation,
+  Ingredient,
+  PaymentAccountChannel,
+  PaymentAccountMapping,
+  Product,
+  Recipe,
+} from "../types";
 import { matchesIngredientCategory } from "./financeMetrics";
 
 export interface RecipeIngredientRef {
@@ -490,12 +497,26 @@ export function resolvePaymentAccountId(
   paymentMethod: string,
   requestedAccountId: string | null | undefined,
   cashAccounts: { id: string; name: string; type: string; isDefault?: boolean }[] = [],
-  activeShiftCashAccountId?: string | null
+  activeShiftCashAccountId?: string | null,
+  paymentAccountMapping?: PaymentAccountMapping | null
 ): string | null {
   const method = String(paymentMethod || "CASH").toUpperCase();
   const reqAcc = requestedAccountId
     ? cashAccounts.find((a) => a.id === requestedAccountId)
     : undefined;
+
+  const mapChannel: PaymentAccountChannel =
+    method === "CASH"
+      ? "cash"
+      : method === "QRIS"
+      ? "qris"
+      : method === "TRANSFER"
+      ? "transfer"
+      : method === "ONLINE" || method === "OJOL" || method === "ONLINE_DELIVERY"
+      ? "onlineDelivery"
+      : "edc";
+  const mappedId = paymentAccountMapping?.[mapChannel];
+  const mappedAcc = mappedId ? cashAccounts.find((a) => a.id === mappedId) : undefined;
 
   if (method === "CASH") {
     if (reqAcc && reqAcc.type === "CASH") return reqAcc.id;
@@ -504,15 +525,19 @@ export function resolvePaymentAccountId(
       if (shiftAcc) return shiftAcc.id;
       return activeShiftCashAccountId;
     }
+    if (mappedAcc && mappedAcc.type === "CASH") return mappedAcc.id;
     const defaultCash =
       cashAccounts.find((a) => a.type === "CASH" && a.isDefault) ||
       cashAccounts.find((a) => a.type === "CASH");
-    return defaultCash?.id || requestedAccountId || null;
+    return defaultCash?.id || mappedAcc?.id || requestedAccountId || null;
   }
 
-  // Non-tunai (QRIS / DEBIT / CREDIT): utamakan akun BANK atau E_WALLET
+  // Non-tunai (QRIS / DEBIT / CREDIT / TRANSFER / OJOL): utamakan requested non-cash, lalu default mapping, lalu BANK/E_WALLET
   if (reqAcc && reqAcc.type !== "CASH") {
     return reqAcc.id;
+  }
+  if (mappedAcc) {
+    return mappedAcc.id;
   }
   const nonCashAcc =
     cashAccounts.find((a) => (a.type === "BANK" || a.type === "E_WALLET") && a.isDefault) ||
