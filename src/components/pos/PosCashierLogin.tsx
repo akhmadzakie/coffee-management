@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { useStore } from "../../store/StoreContext";
 import { DEFAULT_STORE_TIMEZONE } from "../../utils/dateUtils";
 import { useTheme, ThemeToggleButton } from "../../context/ThemeContext";
-import { resolveThemeLogo } from "../../utils/brandLogo";
+import { resolveBrandLogo, resolveThemeLogo } from "../../utils/brandLogo";
 import {
   Coffee,
   Lock,
@@ -188,9 +188,10 @@ export const PosCashierLogin: React.FC<PosCashierLoginProps> = ({ onLoginSuccess
             alt={settings?.brandName || "Julia's"}
             className="h-11 w-auto object-contain"
             onError={(e) => {
-              (e.currentTarget as HTMLImageElement).src = isDark
-                ? "/logo-icon-color.png"
-                : "/logo-icon-blue.png";
+              (e.currentTarget as HTMLImageElement).src = resolveBrandLogo(
+                null,
+                isDark ? "icon-on-dark" : "icon-on-light"
+              );
             }}
           />
           <div className="border-l border-slate-200 dark:border-slate-800 pl-3 hidden sm:block">

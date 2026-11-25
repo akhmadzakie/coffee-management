@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useTheme, ThemeToggleButton } from "../context/ThemeContext";
-import { resolveThemeLogo } from "../utils/brandLogo";
+import { resolveBrandLogo, resolveThemeLogo } from "../utils/brandLogo";
 
 export const Login = () => {
   const { login, settings, users, wasForceLoggedOut, dismissForceLogoutAlert, lastLoginError } = useStore();
@@ -224,9 +224,10 @@ export const Login = () => {
             alt={settings?.brandName || "Julia's"}
             className="h-10 w-auto object-contain"
             onError={(e) => {
-              (e.currentTarget as HTMLImageElement).src = isDark
-                ? "/logo-icon-color.png"
-                : "/logo-icon-blue.png";
+              (e.currentTarget as HTMLImageElement).src = resolveBrandLogo(
+                null,
+                isDark ? "icon-on-dark" : "icon-on-light"
+              );
             }}
           />
           <div className="border-l border-slate-200 dark:border-slate-800 pl-3 hidden sm:block">

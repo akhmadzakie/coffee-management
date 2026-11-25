@@ -3,6 +3,8 @@
  * brand-gradient sidebars, collapsed icon rails, and thermal/PDF monochrome prints.
  */
 
+export const BRAND_LOGO_VERSION = "20261125";
+
 export const DEFAULT_BRAND_LOGO_SETTING = "/logo-wordmark-white.png";
 
 export const BUILTIN_DEFAULT_LOGOS = new Set<string>([
@@ -43,13 +45,23 @@ const CONTEXT_LOGO_MAP: Record<BrandLogoContext, string> = {
 };
 
 /**
+ * Appends the canonical static asset version query string to a built-in logo path
+ * so browsers and service workers immediately fetch refreshed transparent assets.
+ */
+export function withBrandLogoVersion(path: string): string {
+  const basePath = path.split("?")[0];
+  return `${basePath}?v=${BRAND_LOGO_VERSION}`;
+}
+
+/**
  * Returns true only when settings.logoDataUrl contains a client-uploaded custom image
  * (e.g. a data URL or non-built-in asset path), rather than a built-in Julia's brand asset.
  */
 export function isCustomBrandLogo(logoDataUrl?: string | null): boolean {
   const trimmed = (logoDataUrl || "").trim();
   if (!trimmed) return false;
-  return !BUILTIN_DEFAULT_LOGOS.has(trimmed);
+  const basePath = trimmed.split("?")[0];
+  return !BUILTIN_DEFAULT_LOGOS.has(basePath);
 }
 
 /**
@@ -63,7 +75,7 @@ export function resolveBrandLogo(
   if (isCustomBrandLogo(logoDataUrl)) {
     return (logoDataUrl as string).trim();
   }
-  return CONTEXT_LOGO_MAP[context];
+  return withBrandLogoVersion(CONTEXT_LOGO_MAP[context]);
 }
 
 /**

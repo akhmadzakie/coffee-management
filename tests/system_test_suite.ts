@@ -9,6 +9,7 @@ import {
   isCustomBrandLogo,
   resolveBrandLogo,
   resolveThemeLogo,
+  withBrandLogoVersion,
 } from "../src/utils/brandLogo";
 import {
   DEFAULT_STORE_TIMEZONE,
@@ -5953,19 +5954,20 @@ test("45. brandLogo resolver memilih varian logo adaptif & menghormati logo kust
   assert.strictEqual(isCustomBrandLogo(""), false);
   assert.strictEqual(isCustomBrandLogo(DEFAULT_BRAND_LOGO_SETTING), false);
   assert.strictEqual(isCustomBrandLogo("/logo-name-blue.png"), false);
+  assert.strictEqual(isCustomBrandLogo(withBrandLogoVersion("/logo-name-white.png")), false);
   assert.strictEqual(isCustomBrandLogo("data:image/png;base64,iVBORw0KGgo="), true);
   assert.strictEqual(isCustomBrandLogo("https://cdn.example.com/custom.png"), true);
 
-  // Built-in defaults route by context & theme
-  assert.strictEqual(resolveBrandLogo(DEFAULT_BRAND_LOGO_SETTING, "icon-on-dark"), "/logo-icon-color.png");
-  assert.strictEqual(resolveBrandLogo(DEFAULT_BRAND_LOGO_SETTING, "icon-on-light"), "/logo-icon-blue.png");
-  assert.strictEqual(resolveBrandLogo(DEFAULT_BRAND_LOGO_SETTING, "name-on-dark"), "/logo-name-white.png");
-  assert.strictEqual(resolveBrandLogo(DEFAULT_BRAND_LOGO_SETTING, "name-on-light"), "/logo-name-blue.png");
-  assert.strictEqual(resolveBrandLogo(DEFAULT_BRAND_LOGO_SETTING, "mono-print"), "/logo-wordmark-mono.png");
-  assert.strictEqual(resolveThemeLogo(null, true, "name"), "/logo-name-white.png");
-  assert.strictEqual(resolveThemeLogo(null, false, "name"), "/logo-name-blue.png");
-  assert.strictEqual(resolveThemeLogo(DEFAULT_BRAND_LOGO_SETTING, true, "icon"), "/logo-icon-color.png");
-  assert.strictEqual(resolveThemeLogo(DEFAULT_BRAND_LOGO_SETTING, false, "icon"), "/logo-icon-blue.png");
+  // Built-in defaults route by context & theme (dengan cache-busting query version)
+  assert.strictEqual(resolveBrandLogo(DEFAULT_BRAND_LOGO_SETTING, "icon-on-dark"), withBrandLogoVersion("/logo-icon-color.png"));
+  assert.strictEqual(resolveBrandLogo(DEFAULT_BRAND_LOGO_SETTING, "icon-on-light"), withBrandLogoVersion("/logo-icon-blue.png"));
+  assert.strictEqual(resolveBrandLogo(DEFAULT_BRAND_LOGO_SETTING, "name-on-dark"), withBrandLogoVersion("/logo-name-white.png"));
+  assert.strictEqual(resolveBrandLogo(DEFAULT_BRAND_LOGO_SETTING, "name-on-light"), withBrandLogoVersion("/logo-name-blue.png"));
+  assert.strictEqual(resolveBrandLogo(DEFAULT_BRAND_LOGO_SETTING, "mono-print"), withBrandLogoVersion("/logo-wordmark-mono.png"));
+  assert.strictEqual(resolveThemeLogo(null, true, "name"), withBrandLogoVersion("/logo-name-white.png"));
+  assert.strictEqual(resolveThemeLogo(null, false, "name"), withBrandLogoVersion("/logo-name-blue.png"));
+  assert.strictEqual(resolveThemeLogo(DEFAULT_BRAND_LOGO_SETTING, true, "icon"), withBrandLogoVersion("/logo-icon-color.png"));
+  assert.strictEqual(resolveThemeLogo(DEFAULT_BRAND_LOGO_SETTING, false, "icon"), withBrandLogoVersion("/logo-icon-blue.png"));
 
   // Custom uploaded logo overrides built-in contexts cleanly
   const customLogo = "data:image/png;base64,CUSTOMDATA";

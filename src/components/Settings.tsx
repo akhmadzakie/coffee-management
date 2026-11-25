@@ -28,7 +28,7 @@ import {
 import { ConnectedDevices } from "./ConnectedDevices";
 import { DataCleaningPanel } from "./DataCleaningPanel";
 import { CustomSelect } from "./common/CustomSelect";
-import { DEFAULT_BRAND_LOGO_SETTING, isCustomBrandLogo } from "../utils/brandLogo";
+import { DEFAULT_BRAND_LOGO_SETTING, isCustomBrandLogo, resolveBrandLogo } from "../utils/brandLogo";
 
 export const SettingsComponent = () => {
   const { settings, updateSettings, currentUser } = useStore();
@@ -306,7 +306,7 @@ export const SettingsComponent = () => {
                     <div className="grid grid-cols-2 gap-2">
                       <div className="rounded-xl bg-white border border-slate-200 p-2.5 flex flex-col items-center justify-center gap-1.5">
                         <img
-                          src="/logo-name-blue.png"
+                          src={resolveBrandLogo(null, "name-on-light")}
                           alt="Logo Light Mode"
                           className="h-7 w-auto object-contain"
                         />
@@ -314,7 +314,7 @@ export const SettingsComponent = () => {
                       </div>
                       <div className="rounded-xl bg-brand-gradient border border-brand-700 p-2.5 flex flex-col items-center justify-center gap-1.5">
                         <img
-                          src="/logo-name-white.png"
+                          src={resolveBrandLogo(null, "name-on-dark")}
                           alt="Logo Dark Mode"
                           className="h-7 w-auto object-contain"
                         />
@@ -324,17 +324,17 @@ export const SettingsComponent = () => {
                     <div className="flex items-center justify-between gap-2 px-1 pt-0.5">
                       <div className="flex items-center gap-1.5">
                         <img
-                          src="/logo-icon-blue.png"
+                          src={resolveBrandLogo(null, "icon-on-light")}
                           alt="Ikon Terang"
                           className="w-6 h-6 object-contain rounded-lg bg-white border border-slate-200 p-0.5"
                         />
                         <img
-                          src="/logo-icon-color.png"
+                          src={resolveBrandLogo(null, "icon-on-dark")}
                           alt="Ikon Gelap"
                           className="w-6 h-6 object-contain rounded-lg bg-slate-900 border border-slate-700 p-0.5"
                         />
                         <img
-                          src="/logo-wordmark-mono.png"
+                          src={resolveBrandLogo(null, "mono-print")}
                           alt="Logo Struk Thermal"
                           className="h-5 w-auto object-contain rounded bg-white border border-slate-200 px-1 py-0.5"
                         />

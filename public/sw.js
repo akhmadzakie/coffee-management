@@ -1,15 +1,17 @@
-const CACHE_NAME = "julias-management-v2";
+const CACHE_NAME = "julias-management-v3";
 const STATIC_ASSETS = [
   "/",
   "/index.html",
   "/pos",
   "/kds",
   "/manifest.json",
-  "/favicon.png",
-  "/icon-192.png",
-  "/icon-512.png",
-  "/apple-touch-icon.png",
-  "/logo-wordmark-white.png",
+  "/favicon.png?v=20261125",
+  "/icon-192.png?v=20261125",
+  "/icon-512.png?v=20261125",
+  "/apple-touch-icon.png?v=20261125",
+  "/logo-name-white.png?v=20261125",
+  "/logo-name-blue.png?v=20261125",
+  "/logo-wordmark-white.png?v=20261125",
 ];
 
 // Install event: Precache core shell assets
