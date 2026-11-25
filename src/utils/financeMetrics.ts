@@ -1716,7 +1716,14 @@ export function isSalesCashTransaction(
   const desc = String(t.description || "").trim().toLowerCase();
   const ref = String(t.referenceId || "").trim().toLowerCase();
 
-  if (catId === "cat-penjualan" || catName === "cat-penjualan") return true;
+  if (
+    catId === "cat-penjualan" ||
+    catId === "cat-penjualan-makanan" ||
+    catId === "cat-penjualan-pastry" ||
+    catName === "cat-penjualan"
+  ) {
+    return true;
+  }
   if (ref.startsWith("pos-") || ref.startsWith("recap-") || ref.startsWith("sales-log-")) {
     return true;
   }
@@ -2573,5 +2580,180 @@ export function computeOwnerProfitAllocation(params: {
     reserveRemainingToTransfer: reserveShareAmount - netSavingsAllocation,
     capexExpense,
     retainedProfitAfterPrive: netProfit - ownerPriveTotal,
+  };
+}
+
+export interface RevenueCategoryBreakdownRow {
+  categoryId: string;
+  name: string;
+  isSales: boolean;
+  amount: number;
+  txCount: number;
+  sharePercent: number;
+}
+
+export interface RevenueCategoryBreakdownResult {
+  rows: RevenueCategoryBreakdownRow[];
+  totalSalesCashIn: number;
+  totalOtherCashIn: number;
+  totalRevenueCashIn: number;
+}
+
+/** Mengelompokkan kas masuk operasional per sub-kategori Pendapatan (Minuman/BAR, Makanan, Pastry, Lainnya). */
+export function computeRevenueCategoryBreakdown(params: {
+  cashTransactions: CashTransaction[];
+  expenseCategories?: ExpenseCategory[];
+  period: string;
+  startDate?: string;
+  endDate?: string;
+}): RevenueCategoryBreakdownResult {
+  const {
+    cashTransactions = [],
+    expenseCategories = [],
+    period,
+    startDate,
+    endDate,
+  } = params;
+
+  const hasDateRange = Boolean(startDate && endDate);
+  const effectiveStart = hasDateRange
+    ? startDate! <= endDate!
+      ? startDate!
+      : endDate!
+    : "";
+  const effectiveEnd = hasDateRange
+    ? startDate! <= endDate!
+      ? endDate!
+      : startDate!
+    : "";
+
+  const matchesRange = (rawDate: string | undefined | null) => {
+    if (hasDateRange) {
+      const day = toLocalDateKey(rawDate);
+      return Boolean(day && day >= effectiveStart && day <= effectiveEnd);
+    }
+    return matchesPeriodDate(rawDate, period);
+  };
+
+  const incomeSubCategories = (expenseCategories || [])
+    .filter((c) => c.type === "PENDAPATAN" && c.parentId !== null && c.isActive !== false)
+    .sort((a, b) => (Number(a.sortOrder) || 0) - (Number(b.sortOrder) || 0) || a.name.localeCompare(b.name));
+
+  const byId = new Map<string, ExpenseCategory>();
+  const byNameLower = new Map<string, ExpenseCategory>();
+  for (const cat of expenseCategories || []) {
+    if (cat.id) byId.set(cat.id, cat);
+    if (cat.name && cat.type === "PENDAPATAN") {
+      byNameLower.set(cat.name.trim().toLowerCase(), cat);
+    }
+  }
+
+  const buckets = new Map<
+    string,
+    { categoryId: string; name: string; isSales: boolean; amount: number; txCount: number; order: number }
+  >();
+
+  incomeSubCategories.forEach((cat, idx) => {
+    const isOther = cat.id === "cat-pendapatan-lain" || cat.name.toLowerCase().includes("pendapatan lain");
+    buckets.set(cat.id, {
+      categoryId: cat.id,
+      name: cat.name,
+      isSales: !isOther,
+      amount: 0,
+      txCount: 0,
+      order: idx,
+    });
+  });
+
+  const ensureBucket = (
+    key: string,
+    name: string,
+    isSales: boolean,
+    fallbackOrder: number
+  ) => {
+    let b = buckets.get(key);
+    if (!b) {
+      b = { categoryId: key, name, isSales, amount: 0, txCount: 0, order: fallbackOrder };
+      buckets.set(key, b);
+    }
+    return b;
+  };
+
+  let totalSalesCashIn = 0;
+  let totalOtherCashIn = 0;
+
+  for (const t of cashTransactions) {
+    if (String(t.type || "").toUpperCase() !== "CASH_IN") continue;
+    if (!matchesRange(t.date)) continue;
+    if (isNonOperationalCashTransaction(t)) continue;
+
+    const amt = Math.max(0, Math.round(Number(t.amount) || 0));
+    if (amt <= 0) continue;
+
+    const directCat = t.categoryId ? byId.get(t.categoryId) : undefined;
+    const matchedCat =
+      (directCat && directCat.type === "PENDAPATAN" && directCat.parentId !== null
+        ? directCat
+        : undefined) ||
+      byNameLower.get(String(t.category || "").trim().toLowerCase());
+
+    const txIsSales = isSalesCashTransaction(t, expenseCategories);
+
+    let targetKey: string;
+    let targetName: string;
+    let isSalesBucket = txIsSales;
+    let fallbackOrder = 900;
+
+    if (matchedCat && matchedCat.parentId !== null) {
+      targetKey = matchedCat.id;
+      targetName = matchedCat.name;
+      isSalesBucket =
+        txIsSales ||
+        matchedCat.id !== "cat-pendapatan-lain";
+    } else if (txIsSales) {
+      const primarySales = byId.get("cat-penjualan");
+      targetKey = primarySales ? primarySales.id : "unmapped-sales";
+      targetName = primarySales ? primarySales.name : "Penjualan Toko / Kasir";
+      isSalesBucket = true;
+      fallbackOrder = 500;
+    } else {
+      const otherInc = byId.get("cat-pendapatan-lain");
+      targetKey = otherInc ? otherInc.id : "unmapped-other-income";
+      targetName = otherInc ? otherInc.name : "Pendapatan Lain";
+      isSalesBucket = false;
+      fallbackOrder = 950;
+    }
+
+    const bucket = ensureBucket(targetKey, targetName, isSalesBucket, fallbackOrder);
+    bucket.amount += amt;
+    bucket.txCount += 1;
+
+    if (isSalesBucket) {
+      totalSalesCashIn += amt;
+    } else {
+      totalOtherCashIn += amt;
+    }
+  }
+
+  const totalRevenueCashIn = totalSalesCashIn + totalOtherCashIn;
+  const rows: RevenueCategoryBreakdownRow[] = Array.from(buckets.values())
+    .sort((a, b) => a.order - b.order)
+    .map((b) => ({
+      categoryId: b.categoryId,
+      name: b.name,
+      isSales: b.isSales,
+      amount: b.amount,
+      txCount: b.txCount,
+      sharePercent:
+        totalRevenueCashIn > 0
+          ? Math.round((b.amount / totalRevenueCashIn) * 1000) / 10
+          : 0,
+    }));
+
+  return {
+    rows,
+    totalSalesCashIn,
+    totalOtherCashIn,
+    totalRevenueCashIn,
   };
 }

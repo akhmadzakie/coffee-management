@@ -17,6 +17,7 @@ import {
   computeCashLiquidityBreakdown,
   computeOwnerProfitAllocation,
   computePeriodFinancialSummary,
+  computeRevenueCategoryBreakdown,
   getPreviousPeriodString,
   isCapexCashTransaction,
   isNonOperationalCashTransaction,
@@ -258,6 +259,24 @@ const FinanceReports: React.FC = () => {
   const totalDiscountAmount = unifiedPeriodSummary.totalDiscountAmount;
   const totalRefundAmount = unifiedPeriodSummary.totalRefundAmount;
   const netSales = unifiedPeriodSummary.netSales;
+
+  const revenueCategoryBreakdown = useMemo(() => {
+    return computeRevenueCategoryBreakdown({
+      cashTransactions,
+      expenseCategories,
+      period: filterMode === "monthly" ? period : "ALL",
+      ...(filterMode === "range"
+        ? { startDate: normalizedRangeStart, endDate: normalizedRangeEnd }
+        : {}),
+    });
+  }, [
+    cashTransactions,
+    expenseCategories,
+    filterMode,
+    period,
+    normalizedRangeStart,
+    normalizedRangeEnd,
+  ]);
 
   // Breakdown Metode Pembayaran Rekap Kasir (Tunai, QRIS, EDC, Transfer, Ojol/Delivery)
   const paymentMethodBreakdown = unifiedPeriodSummary.paymentBreakdown;
@@ -1538,6 +1557,40 @@ const FinanceReports: React.FC = () => {
                       {netSales > 0 ? `${((grossSales / netSales) * 100).toFixed(1)}%` : "0.0%"}
                     </td>
                   </tr>
+                  {revenueCategoryBreakdown.rows.map((revRow) => (
+                    <tr
+                      key={revRow.categoryId}
+                      className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 text-[11px] text-slate-500 dark:text-slate-400"
+                    >
+                      <td className="py-2 px-3 sm:px-6 pl-12">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="text-slate-400 dark:text-slate-500">↳</span>
+                          <span className="font-medium text-slate-600 dark:text-slate-300">
+                            {revRow.name}
+                          </span>
+                          {!revRow.isSales && (
+                            <span className="text-[9px] px-1.5 py-0.5 rounded bg-sky-50 dark:bg-sky-500/15 text-sky-700 dark:text-sky-300 border border-sky-200/70 dark:border-sky-500/30 font-semibold">
+                              Non-Penjualan
+                            </span>
+                          )}
+                          {revRow.txCount > 0 && (
+                            <span className="text-[10px] text-slate-400 dark:text-slate-500 tabular-nums">
+                              ({revRow.txCount} tx)
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="py-2 px-3 text-right font-mono tabular-nums text-slate-600 dark:text-slate-300">
+                        {formatCurrency(revRow.amount)}
+                      </td>
+                      <td className="py-2 px-3 sm:px-6 text-right font-mono text-slate-300 dark:text-slate-600">
+                        -
+                      </td>
+                      <td className="py-2 px-3 text-center text-slate-400 dark:text-slate-500 tabular-nums">
+                        {revRow.sharePercent.toFixed(1)}%
+                      </td>
+                    </tr>
+                  ))}
                   <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 text-slate-500 dark:text-slate-400">
                     <td className="p-3 sm:px-6 pl-8">
                       Potongan Penjualan / Diskon Promo (-)

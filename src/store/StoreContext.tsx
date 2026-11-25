@@ -392,7 +392,8 @@ export const DEFAULT_EXPENSE_CATEGORIES: ExpenseCategory[] = [
   // Sub-Kategori: Pendapatan
   { id: "cat-penjualan", name: "Penjualan Minuman", type: "PENDAPATAN", parentId: "cat-pendapatan", color: "#34D399", icon: "coffee", isActive: true, sortOrder: 1 },
   { id: "cat-penjualan-makanan", name: "Penjualan Makanan", type: "PENDAPATAN", parentId: "cat-pendapatan", color: "#6EE7B7", icon: "utensils", isActive: true, sortOrder: 2 },
-  { id: "cat-pendapatan-lain", name: "Pendapatan Lain / Event", type: "PENDAPATAN", parentId: "cat-pendapatan", color: "#A7F3D0", icon: "plus-circle", isActive: true, sortOrder: 3 },
+  { id: "cat-penjualan-pastry", name: "Penjualan Pastry & Bakery", type: "PENDAPATAN", parentId: "cat-pendapatan", color: "#10B981", icon: "cake", isActive: true, sortOrder: 3 },
+  { id: "cat-pendapatan-lain", name: "Pendapatan Lain / Event", type: "PENDAPATAN", parentId: "cat-pendapatan", color: "#A7F3D0", icon: "plus-circle", isActive: true, sortOrder: 4 },
   // Sub-Kategori: Pengeluaran Operasional
   { id: "cat-sewa", name: "Sewa Tempat", type: "PENGELUARAN", parentId: "cat-pengeluaran", color: "#FCA5A5", icon: "home", isActive: true, sortOrder: 1 },
   { id: "cat-kebersihan", name: "Kebersihan & Sanitasi", type: "PENGELUARAN", parentId: "cat-pengeluaran", color: "#FCA5A5", icon: "trash-2", isActive: true, sortOrder: 2 },

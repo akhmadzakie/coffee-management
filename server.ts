@@ -328,7 +328,8 @@ const defaultCategories = [
   // Children: Pendapatan
   { id: "cat-penjualan", name: "Penjualan Minuman", type: "PENDAPATAN", parentId: "cat-pendapatan", color: "#34D399", icon: "coffee", isActive: true, sortOrder: 1 },
   { id: "cat-penjualan-makanan", name: "Penjualan Makanan", type: "PENDAPATAN", parentId: "cat-pendapatan", color: "#6EE7B7", icon: "utensils", isActive: true, sortOrder: 2 },
-  { id: "cat-pendapatan-lain", name: "Pendapatan Lain", type: "PENDAPATAN", parentId: "cat-pendapatan", color: "#A7F3D0", icon: "plus-circle", isActive: true, sortOrder: 3 },
+  { id: "cat-penjualan-pastry", name: "Penjualan Pastry & Bakery", type: "PENDAPATAN", parentId: "cat-pendapatan", color: "#10B981", icon: "cake", isActive: true, sortOrder: 3 },
+  { id: "cat-pendapatan-lain", name: "Pendapatan Lain", type: "PENDAPATAN", parentId: "cat-pendapatan", color: "#A7F3D0", icon: "plus-circle", isActive: true, sortOrder: 4 },
   // Children: Pengeluaran
   { id: "cat-sewa", name: "Sewa Tempat", type: "PENGELUARAN", parentId: "cat-pengeluaran", color: "#FCA5A5", icon: "home", isActive: true, sortOrder: 1 },
   { id: "cat-kebersihan", name: "Kebersihan & Sanitasi", type: "PENGELUARAN", parentId: "cat-pengeluaran", color: "#FCA5A5", icon: "trash-2", isActive: true, sortOrder: 2 },
@@ -882,6 +883,58 @@ async function ensureTables() {
     }
   } catch (migErr: any) {
     // Abaikan jika tabel users belum terisi atau database offline
+  }
+
+  // Migrasi idempoten kategori inti Penjualan Pastry (cat-penjualan-pastry) pada DB yang sudah terisi
+  try {
+    const catCountRes = await pool.query(`SELECT COUNT(*)::int AS cnt FROM expense_categories`);
+    const catCount = Number(catCountRes.rows?.[0]?.cnt || 0);
+    if (catCount > 0) {
+      const existingPastryCore = await pool.query(
+        `SELECT id FROM expense_categories WHERE id = 'cat-penjualan-pastry' LIMIT 1`
+      );
+      if ((existingPastryCore.rows?.length || 0) === 0) {
+        const customPastryRes = await pool.query(
+          `SELECT * FROM expense_categories
+           WHERE type = 'PENDAPATAN' AND id <> 'cat-pendapatan'
+             AND name ~* '(pastry|bakery|roti)'
+           ORDER BY sort_order ASC LIMIT 1`
+        );
+        const oldRow = customPastryRes.rows?.[0];
+        if (oldRow) {
+          await pool.query(
+            `INSERT INTO expense_categories (id, name, type, parent_id, color, icon, is_active, sort_order)
+             VALUES ($1, $2, 'PENDAPATAN', 'cat-pendapatan', $3, $4, $5, $6)
+             ON CONFLICT (id) DO NOTHING`,
+            [
+              "cat-penjualan-pastry",
+              String(oldRow.name || "Penjualan Pastry & Bakery"),
+              String(oldRow.color || "#10B981"),
+              String(oldRow.icon || "cake"),
+              oldRow.is_active !== undefined ? Boolean(oldRow.is_active) : true,
+              Number(oldRow.sort_order) || 3,
+            ]
+          );
+          await pool.query(
+            `UPDATE cash_transactions SET category_id = 'cat-penjualan-pastry' WHERE category_id = $1`,
+            [oldRow.id]
+          );
+          await pool.query(
+            `UPDATE budgets SET category_id = 'cat-penjualan-pastry' WHERE category_id = $1`,
+            [oldRow.id]
+          );
+          await pool.query(`DELETE FROM expense_categories WHERE id = $1`, [oldRow.id]);
+        } else {
+          await pool.query(
+            `INSERT INTO expense_categories (id, name, type, parent_id, color, icon, is_active, sort_order)
+             VALUES ('cat-penjualan-pastry', 'Penjualan Pastry & Bakery', 'PENDAPATAN', 'cat-pendapatan', '#10B981', 'cake', true, 3)
+             ON CONFLICT (id) DO NOTHING`
+          );
+        }
+      }
+    }
+  } catch (pastryMigErr: any) {
+    // Abaikan jika tabel belum tersedia pada mode offline
   }
 
   console.log("✅ Schema ensured: Fase 1-4 & POS tables ready.");

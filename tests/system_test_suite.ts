@@ -72,6 +72,8 @@ import {
   matchBankStatementLines,
   parseBankStatementAmount,
   parseBankStatementCsv,
+  isSalesCashTransaction,
+  computeRevenueCategoryBreakdown,
 } from "../src/utils/financeMetrics";
 import {
   sanitizeIngredientRecord,
@@ -5872,11 +5874,13 @@ test("44b. shouldAutoSeedDummyData membaca flag __autoSeedDisabled secara akurat
   assert.strictEqual(shouldAutoSeedDummyData({ autoSeedDisabled: true }), false);
 });
 
-test("44c. CORE_EXPENSE_CATEGORY_IDS menjaga 32 ID kategori P&L/HPP/CapEx sistem", () => {
-  assert.strictEqual(CORE_EXPENSE_CATEGORY_IDS.size, 32);
+test("44c. CORE_EXPENSE_CATEGORY_IDS menjaga 33 ID kategori P&L/HPP/CapEx sistem", () => {
+  assert.strictEqual(CORE_EXPENSE_CATEGORY_IDS.size, 33);
   for (const requiredId of [
     "cat-pendapatan",
     "cat-penjualan",
+    "cat-penjualan-makanan",
+    "cat-penjualan-pastry",
     "cat-bahan-baku",
     "cat-gaji",
     "cat-aset-mesin",
@@ -6630,6 +6634,54 @@ test("49c. resolveRecapChannelAllocations mempertahankan qrisAccountId/edcAccoun
   const byAcc = new Map(alloc.nonCashGroups.map((g) => [g.accountId, g.amount]));
   assert.strictEqual(byAcc.get("bank-qris"), 250000);
   assert.strictEqual(byAcc.get("bank-edc"), 350000);
+});
+
+test("49d. cat-penjualan-pastry dikenali isSalesCashTransaction dan dipecah akurat oleh computeRevenueCategoryBreakdown", () => {
+  const categories: ExpenseCategory[] = [
+    { id: "cat-pendapatan", name: "Pendapatan", type: "PENDAPATAN", parentId: null, color: "#10B981", icon: "trending-up", isActive: true, sortOrder: 1 },
+    { id: "cat-penjualan", name: "Penjualan BAR", type: "PENDAPATAN", parentId: "cat-pendapatan", color: "#34D399", icon: "coffee", isActive: true, sortOrder: 1 },
+    { id: "cat-penjualan-makanan", name: "Penjualan Makanan", type: "PENDAPATAN", parentId: "cat-pendapatan", color: "#6EE7B7", icon: "utensils", isActive: true, sortOrder: 2 },
+    { id: "cat-penjualan-pastry", name: "Bakery Counter", type: "PENDAPATAN", parentId: "cat-pendapatan", color: "#10B981", icon: "cake", isActive: true, sortOrder: 3 },
+    { id: "cat-pendapatan-lain", name: "Pendapatan Lain", type: "PENDAPATAN", parentId: "cat-pendapatan", color: "#A7F3D0", icon: "plus-circle", isActive: true, sortOrder: 4 },
+  ];
+
+  // Kategori cat-penjualan-pastry tetap diakui sebagai penjualan meski di-rename tanpa kata "Penjualan"
+  assert.strictEqual(
+    isSalesCashTransaction(
+      {
+        type: "CASH_IN",
+        categoryId: "cat-penjualan-pastry",
+        category: "Bakery Counter",
+        description: "Setoran roti harian",
+      },
+      categories
+    ),
+    true
+  );
+
+  const cashTxs: CashTransaction[] = [
+    { id: "tx-1", accountId: "cash-1", type: "CASH_IN", date: "2026-05-10T08:00:00Z", amount: 500000, description: "Kopi pagi", category: "Penjualan BAR", categoryId: "cat-penjualan" },
+    { id: "tx-2", accountId: "cash-1", type: "CASH_IN", date: "2026-05-11T09:00:00Z", amount: 300000, description: "Croissant & Roti", category: "Bakery Counter", categoryId: "cat-penjualan-pastry" },
+    { id: "tx-3", accountId: "cash-1", type: "CASH_IN", date: "2026-05-12T10:00:00Z", amount: 200000, description: "Sewa ruang meeting", category: "Pendapatan Lain", categoryId: "cat-pendapatan-lain" },
+    { id: "tx-4", accountId: "cash-1", type: "CASH_IN", date: "2026-05-12T11:00:00Z", amount: 900000, description: "Saldo Awal Kasir", category: "Saldo Awal" },
+  ];
+
+  const rev = computeRevenueCategoryBreakdown({
+    cashTransactions: cashTxs,
+    expenseCategories: categories,
+    period: "2026-05",
+  });
+
+  assert.strictEqual(rev.totalSalesCashIn, 800000);
+  assert.strictEqual(rev.totalOtherCashIn, 200000);
+  assert.strictEqual(rev.totalRevenueCashIn, 1000000);
+
+  const rowMap = new Map(rev.rows.map((r) => [r.categoryId, r]));
+  assert.strictEqual(rowMap.get("cat-penjualan")?.amount, 500000);
+  assert.strictEqual(rowMap.get("cat-penjualan-makanan")?.amount, 0);
+  assert.strictEqual(rowMap.get("cat-penjualan-pastry")?.amount, 300000);
+  assert.strictEqual(rowMap.get("cat-penjualan-pastry")?.sharePercent, 30);
+  assert.strictEqual(rowMap.get("cat-pendapatan-lain")?.amount, 200000);
 });
 
 // -------------------------------------------------------------

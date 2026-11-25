@@ -17,6 +17,7 @@ import {
   ShiftSession,
 } from "../types";
 import {
+  computeRevenueCategoryBreakdown,
   getSaleTransactionAmount,
   isNonOperationalCashTransaction,
   parseBankStatementAmount,
@@ -70,6 +71,7 @@ export const exportFinanceToXlsx = async ({
   finance,
   settings,
   periodLabel,
+  expenseCategories = [],
 }: ExportFinanceXlsxOptions) => {
   const brandName = settings.brandName || "Julia's • Specialty Room • Coffee • Eatery";
   const operationalFinance = finance.filter((f) => !isNonOperationalCashTransaction(f));
@@ -88,6 +90,11 @@ export const exportFinanceToXlsx = async ({
       .reduce((a, b) => a + (Number(b.amount) || 0), 0)
   );
   const net = totalIn - totalOut;
+  const revBreakdown = computeRevenueCategoryBreakdown({
+    cashTransactions: finance,
+    expenseCategories,
+    period: "ALL",
+  });
 
   await buildStyledWorkbook({
     filename: `Arus_Kas_${periodLabel.replace(/\s+/g, "_")}`,
@@ -104,6 +111,27 @@ export const exportFinanceToXlsx = async ({
           ["Arus Kas Bersih (Net Cashflow)", net],
         ],
         columnFormats: ["text", "currency"],
+      },
+      {
+        name: "Rincian Pendapatan",
+        title: "Rincian Pendapatan per Kategori",
+        subtitle: `Periode: ${periodLabel}`,
+        headers: ["Kategori Pendapatan", "Jenis", "Jumlah Transaksi", "Total Nominal (Rp)", "Kontribusi (%)"],
+        rows: revBreakdown.rows.map((r) => [
+          r.name,
+          r.isSales ? "Penjualan" : "Pendapatan Lain",
+          r.txCount,
+          r.amount,
+          `${r.sharePercent.toFixed(1)}%`,
+        ]),
+        columnFormats: ["text", "text", "integer", "currency", "text"],
+        totalRow: [
+          "TOTAL PEMASUKAN PENDAPATAN",
+          "",
+          revBreakdown.rows.reduce((s, r) => s + r.txCount, 0),
+          revBreakdown.totalRevenueCashIn,
+          revBreakdown.totalRevenueCashIn > 0 ? "100.0%" : "0.0%",
+        ],
       },
       {
         name: "Transaksi",

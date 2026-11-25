@@ -16,7 +16,7 @@ export const LOCAL_STORAGE_DATA_CACHE_KEYS = [
 ] as const;
 
 /**
- * Seluruh 32 ID kategori keuangan bawaan (defaultCategories di server.ts).
+ * Seluruh 33 ID kategori keuangan bawaan (defaultCategories di server.ts).
  * ID-ID ini dirujuk langsung oleh mesin P&L, HPP, CapEx, dan auto-overhead
  * sehingga wajib dipertahankan agar laporan keuangan klien tidak rusak.
  */
@@ -30,6 +30,7 @@ export const CORE_EXPENSE_CATEGORY_IDS = new Set<string>([
   "cat-lainnya",
   "cat-penjualan",
   "cat-penjualan-makanan",
+  "cat-penjualan-pastry",
   "cat-pendapatan-lain",
   "cat-sewa",
   "cat-kebersihan",

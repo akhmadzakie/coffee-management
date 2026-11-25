@@ -25,7 +25,7 @@ export interface CashAccountProtection {
 }
 
 /**
- * Mengecek apakah Pos Kategori Keuangan termasuk 32 kategori inti terintegrasi sistem.
+ * Mengecek apakah Pos Kategori Keuangan termasuk 33 kategori inti terintegrasi sistem.
  */
 export function isCoreExpenseCategory(
   categoryOrId: string | Pick<ExpenseCategory, "id"> | null | undefined
@@ -54,7 +54,7 @@ export function sanitizeCoreExpenseCategoryUpdate<
 
 /**
  * Penjaga sisi server saat `/api/sync`:
- * - Mencegah penghapusan 32 kategori keuangan inti (`CORE_EXPENSE_CATEGORY_IDS`).
+ * - Mencegah penghapusan 33 kategori keuangan inti (`CORE_EXPENSE_CATEGORY_IDS`).
  * - Mengunci `type` dan `parentId` kategori inti sesuai DB, namun tetap mengizinkan perubahan nama/ikon/warna.
  */
 export function protectCoreExpenseCategoriesOnSync<
