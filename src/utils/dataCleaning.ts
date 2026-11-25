@@ -552,3 +552,95 @@ export function buildCleaningSummary(
     selectedGroupKeys,
   };
 }
+
+export interface UnlinkedUserCandidate {
+  id: string;
+  username: string;
+  name: string;
+  role: string;
+  department?: string | null;
+  employeeId?: string | null;
+  isSuspended?: boolean;
+}
+
+export function findUnlinkedStaffUsers<T extends UnlinkedUserCandidate>(
+  users: T[] = [],
+  employees: Array<{ id?: string; username?: string | null }> = []
+): T[] {
+  const empIds = new Set(employees.map((e) => String(e?.id || "")).filter(Boolean));
+  const empUsernames = new Set(
+    employees.map((e) => String(e?.username || "").trim().toLowerCase()).filter(Boolean)
+  );
+
+  return (users || []).filter((u) => {
+    if (!u || u.isSuspended) return false;
+    const roleUpper = String(u.role || "").toUpperCase();
+    if (roleUpper === "SUPER_ADMIN" || roleUpper === "OWNER") return false;
+    if (u.employeeId && empIds.has(String(u.employeeId))) return false;
+    const uname = String(u.username || "").trim().toLowerCase();
+    if (!uname || empUsernames.has(uname)) return false;
+    return true;
+  });
+}
+
+export function buildEmployeeDraftFromUser(
+  user: UnlinkedUserCandidate,
+  startDate: string
+): {
+  username: string;
+  name: string;
+  position: string;
+  department: string;
+  employmentType: "TETAP";
+  startDate: string;
+  endDate: null;
+  phone: string;
+  address: string;
+  status: "AKTIF";
+} {
+  const roleUpper = String(user.role || "").toUpperCase();
+  const rawDept = String(user.department || "").trim();
+  const rawDeptUpper = rawDept.toUpperCase();
+
+  let position = "Staff Operasional";
+  let department = rawDept || "BAR";
+
+  if (roleUpper === "MANAGER") {
+    position = "Manager Operasional";
+    department = rawDeptUpper.includes("MANAG") ? rawDept : "MANAGEMENT";
+  } else if (roleUpper === "FINANCE") {
+    position = "Finance & Accounting";
+    department =
+      rawDeptUpper.includes("FINANCE") || rawDeptUpper.includes("KEUANGAN")
+        ? rawDept
+        : "FINANCE";
+  } else if (roleUpper === "LEADER") {
+    position = rawDept ? `Leader ${rawDept}` : "Leader Operasional";
+    department = rawDept || "BAR";
+  } else if (roleUpper === "KASIR") {
+    position = "Kasir";
+    department = rawDept || "BAR";
+  } else if (roleUpper === "BAR") {
+    position = "Barista";
+    department = rawDept || "BAR";
+  } else if (roleUpper === "KITCHEN") {
+    position = "Chef / Cook";
+    department = rawDept || "KITCHEN";
+  } else if (roleUpper === "BAKER") {
+    position = "Baker / Pastry";
+    department = rawDept || "BAKER";
+  }
+
+  return {
+    username: String(user.username || "").trim().toLowerCase(),
+    name: String(user.name || user.username || "").trim(),
+    position,
+    department,
+    employmentType: "TETAP",
+    startDate,
+    endDate: null,
+    phone: "-",
+    address: "-",
+    status: "AKTIF",
+  };
+}

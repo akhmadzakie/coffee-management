@@ -15,6 +15,7 @@ import {
   resolveCanonicalEmployeeId,
 } from "../utils/attendanceRecap";
 import { addDaysToLocalDate, validatePayrollMutation } from "../utils/syncSanitizers";
+import { findUnlinkedStaffUsers, buildEmployeeDraftFromUser } from "../utils/dataCleaning";
 import { KPI } from "./KPI";
 import { Payroll } from "./Payroll";
 import { RupiahSign } from "./common/RupiahSign";
@@ -32,6 +33,7 @@ import {
   Download,
   Printer,
   UserCheck,
+  UserPlus,
   X,
   MapPin,
   Camera,
@@ -554,6 +556,52 @@ export function HRManagement() {
     toast.success("Rekap absensi manual berhasil disimpan.");
   };
 
+  const unlinkedStaffUsers = useMemo(
+    () => findUnlinkedStaffUsers(users || [], employees || []),
+    [users, employees]
+  );
+
+  const handleRegisterUserToHR = (targetUser: any) => {
+    if (isReadOnly || !canEditHR || !targetUser) return;
+    const draft = buildEmployeeDraftFromUser(targetUser, getLocalDateString());
+    const dupEmp = employees.find(
+      (e) => (e.username || "").toLowerCase().trim() === draft.username
+    );
+    if (dupEmp) {
+      toast.info(`${targetUser.name} sudah terdaftar di SDM.`);
+      return;
+    }
+    const newEmpId = addEmployee(draft);
+    if (newEmpId) {
+      updateUser({ ...targetUser, employeeId: newEmpId });
+      toast.success(
+        `${draft.name} (@${draft.username}) berhasil didaftarkan ke SDM sebagai ${draft.position}. Silakan buat kontrak gajinya.`
+      );
+    }
+  };
+
+  const handleRegisterAllUsersToHR = () => {
+    if (isReadOnly || !canEditHR || unlinkedStaffUsers.length === 0) return;
+    let addedCount = 0;
+    for (const targetUser of unlinkedStaffUsers) {
+      const draft = buildEmployeeDraftFromUser(targetUser, getLocalDateString());
+      const alreadyExists = employees.some(
+        (e) => (e.username || "").toLowerCase().trim() === draft.username
+      );
+      if (alreadyExists) continue;
+      const newEmpId = addEmployee(draft);
+      if (newEmpId) {
+        updateUser({ ...targetUser, employeeId: newEmpId });
+        addedCount += 1;
+      }
+    }
+    if (addedCount > 0) {
+      toast.success(
+        `${addedCount} akun login (Manager/Finance/Staf) berhasil didaftarkan ke SDM & siap dibuatkan kontrak gaji.`
+      );
+    }
+  };
+
   const handleOpenEmployeeModal = (emp?: any) => {
     if (emp && emp.id) {
       setEditingEmployee(emp);
@@ -575,19 +623,15 @@ export function HRManagement() {
     }
     
     const cleanUsername = empForm.username.toLowerCase().trim();
+    const existingAccountForNewEmp = !editingEmployee
+      ? users.find((u) => (u.username || "").toLowerCase().trim() === cleanUsername)
+      : undefined;
     if (!editingEmployee) {
       const dupEmp = employees.find(
         (e) => (e.username || "").toLowerCase().trim() === cleanUsername
       );
       if (dupEmp) {
         toast.error(`Username "${empForm.username}" sudah digunakan oleh karyawan ${dupEmp.name}. Harap gunakan username unik.`);
-        return;
-      }
-      const dupUser = users.find(
-        (u) => (u.username || "").toLowerCase().trim() === cleanUsername
-      );
-      if (dupUser) {
-        toast.error(`Username "${empForm.username}" sudah terdaftar sebagai akun pengguna sistem.`);
         return;
       }
     } else {
@@ -665,7 +709,13 @@ export function HRManagement() {
       }
     } else {
       const newEmpId = addEmployee({ ...empForm, username: cleanUsername, name: empForm.name.trim() });
-      if (autoCreateUser && newEmpId) {
+      if (existingAccountForNewEmp && newEmpId) {
+        updateUser({
+          ...existingAccountForNewEmp,
+          employeeId: newEmpId,
+        });
+        toast.success(`Karyawan "${empForm.name.trim()}" ditambahkan & ditautkan ke akun login eksisting (@${existingAccountForNewEmp.username}).`);
+      } else if (autoCreateUser && newEmpId) {
         addUser({
           name: empForm.name.trim(),
           username: cleanUsername,
@@ -1901,8 +1951,8 @@ export function HRManagement() {
                       templateFilename="template_karyawan"
                       buttonLabel={isIndo ? "Import" : "Import"}
                       templateDropdowns={{
-                        "Posisi": ["Kasir", "Karyawan", "Leader", "Manager"],
-                        "Departemen": ["MAIN", "BAR", "KITCHEN", "BAKER"],
+                        "Posisi": ["Kasir", "Barista", "Chef", "Baker", "Leader", "Manager", "Finance"],
+                        "Departemen": ["BAR", "KITCHEN", "BAKER", "MANAGEMENT", "FINANCE"],
                         "Status": ["AKTIF", "TIDAK_AKTIF", "RESIGN", "PHK"],
                         "Tipe": ["TETAP", "KONTRAK", "PARUH_WAKTU", "MAGANG"],
                       }}
@@ -1925,6 +1975,57 @@ export function HRManagement() {
                   </div>
                 )}
               </div>
+
+              {/* Banner Sinkronisasi Akun Login Eksisting ke SDM */}
+              <AnimatePresence>
+                {canEditHR && unlinkedStaffUsers.length > 0 && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -6 }}
+                    transition={{ duration: 0.2, ease: "easeOut" }}
+                    className="mb-4 rounded-2xl border border-brand-200/80 dark:border-brand-500/30 bg-gradient-to-br from-brand-50/70 via-white to-white dark:from-brand-500/15 dark:via-slate-900 dark:to-slate-900 p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-3"
+                  >
+                    <div className="space-y-2">
+                      <div className="flex items-start gap-2.5">
+                        <div className="w-8 h-8 rounded-xl bg-brand-600 text-white flex items-center justify-center shrink-0">
+                          <UserPlus className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                            {unlinkedStaffUsers.length} Akun Pengguna Belum Terdaftar di SDM &amp; Kontrak Gaji
+                          </p>
+                          <p className="text-[11px] text-slate-600 dark:text-slate-300 mt-0.5">
+                            Akun yang dipertahankan saat cleaning (seperti Manager/Finance/Kasir) perlu didaftarkan ke SDM agar muncul di daftar Kontrak Gaji &amp; Payroll.
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5 pl-10">
+                        {unlinkedStaffUsers.map((u) => (
+                          <button
+                            key={u.id}
+                            type="button"
+                            onClick={() => handleRegisterUserToHR(u)}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl border border-brand-200 dark:border-brand-500/30 bg-white dark:bg-slate-800 text-[11px] font-bold text-brand-700 dark:text-brand-300 hover:bg-brand-50 dark:hover:bg-brand-500/20 cursor-pointer transition-colors"
+                          >
+                            <Plus className="w-3 h-3" />
+                            <span>{u.name}</span>
+                            <span className="opacity-70">(@{u.username} • {u.role})</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleRegisterAllUsersToHR}
+                      className="shrink-0 inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold shadow-xs cursor-pointer transition-colors"
+                    >
+                      <UserPlus className="w-3.5 h-3.5" />
+                      Daftarkan Semua ke SDM
+                    </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
               {/* Search & Filter Toolbar */}
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 mb-4">
@@ -2122,6 +2223,38 @@ export function HRManagement() {
                   </div>
                 )}
               </div>
+
+              {/* Pengingat jika ada akun login eksisting belum masuk SDM untuk dibuatkan kontrak */}
+              <AnimatePresence>
+                {canEditHR && unlinkedStaffUsers.length > 0 && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -6 }}
+                    transition={{ duration: 0.2, ease: "easeOut" }}
+                    className="mb-4 rounded-2xl border border-brand-200/80 dark:border-brand-500/30 bg-gradient-to-br from-brand-50/70 via-white to-white dark:from-brand-500/15 dark:via-slate-900 dark:to-slate-900 p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                  >
+                    <div className="flex items-start gap-2.5 text-xs">
+                      <UserPlus className="w-4 h-4 text-brand-600 dark:text-brand-300 shrink-0 mt-0.5" />
+                      <p className="text-slate-700 dark:text-slate-200">
+                        <strong className="text-slate-900 dark:text-slate-100">
+                          {unlinkedStaffUsers.length} akun aktif
+                        </strong>{" "}
+                        ({unlinkedStaffUsers.map((u) => `@${u.username} [${u.role}]`).join(", ")}) belum masuk daftar karyawan SDM sehingga belum muncul di pilihan Kontrak Gaji.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleRegisterAllUsersToHR}
+                      className="shrink-0 inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold shadow-xs cursor-pointer transition-colors"
+                    >
+                      <UserPlus className="w-3.5 h-3.5" />
+                      Daftarkan ke SDM Sekarang
+                    </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
               {/* Search & Filter Toolbar */}
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 mb-4">
                 <div className="relative flex-1 max-w-sm">

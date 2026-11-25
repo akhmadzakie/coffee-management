@@ -379,32 +379,40 @@ export function ClockIn() {
     return <div className="p-8 text-center text-slate-500">Silakan login terlebih dahulu.</div>;
 
   const userPos = (activeEmployee?.position || "").toUpperCase();
+  const userDept = (activeEmployee?.department || currentUser?.department || "").toUpperCase();
   const userRole = (currentUser?.role || "").toUpperCase();
   const isManagerOrExempt =
     userRole === "MANAGER" ||
+    userRole === "FINANCE" ||
     userRole === "OWNER" ||
     userRole === "SUPER_ADMIN" ||
     userPos.includes("MANAGER") ||
     userPos.includes("MANAJER") ||
-    userPos.includes("OWNER");
+    userPos.includes("FINANCE") ||
+    userPos.includes("KEUANGAN") ||
+    userPos.includes("ACCOUNTING") ||
+    userPos.includes("AKUNTAN") ||
+    userPos.includes("OWNER") ||
+    userDept.includes("FINANCE") ||
+    userDept.includes("KEUANGAN");
 
   if (isManagerOrExempt) {
     return (
       <div className="max-w-2xl mx-auto py-12 px-4 text-center">
-        <div className="bg-white p-8 rounded-3xl border border-slate-200/80 shadow-xs max-w-lg mx-auto">
-          <div className="w-16 h-16 rounded-3xl bg-brand-50 border border-brand-100 text-brand-600 flex items-center justify-center mx-auto mb-4 shadow-2xs">
+        <div className="bg-white dark:bg-slate-900 p-8 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-xs max-w-lg mx-auto">
+          <div className="w-16 h-16 rounded-3xl bg-brand-50 dark:bg-brand-500/15 border border-brand-100 dark:border-brand-500/30 text-brand-600 dark:text-brand-300 flex items-center justify-center mx-auto mb-4 shadow-2xs">
             <CheckCircle2 className="w-8 h-8" />
           </div>
-          <h2 className="text-xl font-black text-slate-900 tracking-tight">
-            Bebas Kewajiban Presensi & Absen
+          <h2 className="text-xl font-black text-slate-900 dark:text-slate-100 tracking-tight">
+            Bebas Kewajiban Presensi &amp; Absen
           </h2>
-          <p className="text-xs text-slate-500 mt-2 leading-relaxed">
-            Sebagai <strong className="text-slate-800">{currentUser.name} ({currentUser.role})</strong>, Anda dibebaskan dari kewajiban absensi foto selfie, GPS, dan clock in/out harian. Fokus utama Anda adalah supervisi dan pemantauan manajemen operasional kafe.
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 leading-relaxed">
+            Sebagai <strong className="text-slate-800 dark:text-slate-200">{currentUser.name} ({currentUser.role})</strong>, Anda dibebaskan dari kewajiban absensi foto selfie, GPS, dan clock in/out harian. Fokus utama Anda adalah penyelesaian jobdesk manajerial, pengelolaan keuangan, dan pengawasan operasional kafe.
           </p>
-          <div className="mt-6 p-4 rounded-2xl bg-brand-50/60 border border-brand-200/70 text-left">
-            <p className="text-xs font-bold text-brand-900 mb-1">Kebijakan Operasional:</p>
-            <p className="text-[11px] text-brand-800 leading-relaxed">
-              Manajer mengawasi kedisiplinan dan checklist staf melalui <strong>Dashboard Pintar Manajer</strong> tanpa perlu mengisi absen pribadi.
+          <div className="mt-6 p-4 rounded-2xl bg-brand-50/60 dark:bg-brand-500/15 border border-brand-200/70 dark:border-brand-500/30 text-left">
+            <p className="text-xs font-bold text-brand-900 dark:text-brand-200 mb-1">Kebijakan Back-Office &amp; Manajerial:</p>
+            <p className="text-[11px] text-brand-800 dark:text-brand-300 leading-relaxed">
+              Manager dan Finance fokus pada pencapaian target jobdesk operasional serta laporan keuangan tanpa perlu mengisi absen shift harian, dengan hak gaji penuh bulanan sesuai kontrak.
             </p>
           </div>
         </div>

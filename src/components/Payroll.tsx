@@ -227,11 +227,14 @@ export function Payroll() {
           posUpper.includes("MANAJER") ||
           posUpper.includes("FINANCE") ||
           posUpper.includes("KEUANGAN") ||
+          posUpper.includes("ACCOUNTING") ||
+          posUpper.includes("AKUNTAN") ||
           roleUpper === "MANAGER" ||
           roleUpper === "FINANCE" ||
           deptUpper.includes("FINANCE") ||
           deptUpper.includes("KEUANGAN") ||
-          deptUpper.includes("MANAGEMENT");
+          deptUpper.includes("MANAGEMENT") ||
+          deptUpper.includes("MANAJEMEN");
         
         const totalBasicSalary = Math.round(isManagerOrFinance ? rawBasicSalary : (presentDays * dailyWage));
         const totalMealAllowance = Math.round(isManagerOrFinance ? (26 * mealAllowanceRate) : (presentDays * mealAllowanceRate));
@@ -253,7 +256,9 @@ export function Payroll() {
         const checklistDays = empChecklists.length;
         const sopBonus = checklistDays >= 20 ? sopBonusRate : 0;
         
-        const alphaDeduction = alphaDays * (contract?.alphaDeductionPerDay !== undefined && contract?.alphaDeductionPerDay !== 0 ? contract.alphaDeductionPerDay : dailyWage);
+        const alphaDeduction = isManagerOrFinance
+          ? 0
+          : alphaDays * (contract?.alphaDeductionPerDay !== undefined && contract?.alphaDeductionPerDay !== 0 ? contract.alphaDeductionPerDay : dailyWage);
         
         // Potongan Keterlambatan Proporsional Jam Kerja
         const lateLogs = dailyLogs.filter(
@@ -282,7 +287,7 @@ export function Payroll() {
         });
         const roundedLateHours = Math.round(totalLateHours * 10) / 10;
         const hourlyWage = Math.round(dailyWage / 8);
-        const lateDeduction = Math.round(hourlyWage * roundedLateHours);
+        const lateDeduction = isManagerOrFinance ? 0 : Math.round(hourlyWage * roundedLateHours);
 
         const divisionBonusPlafon = settings?.divisionKpiBonusTarget?.[emp.department?.toUpperCase() || ""] || 0;
         const targetKpiBonus = contract?.kpiBonusTarget || divisionBonusPlafon || 0;
@@ -311,8 +316,13 @@ export function Payroll() {
           }
         }
 
-        // Skor KPI Otomatis: Leader dari Checklist Shift, Staf dari Presensi & Disiplin
-        const autoScore = isLeader
+        // Skor KPI Otomatis: Manager & Finance berbasis evaluasi jobdesk/KPI, Leader dari Checklist Shift, Staf dari Presensi & Disiplin
+        const autoScore = isManagerOrFinance
+          ? Math.max(
+              0,
+              Math.min(100, Math.round(Number((kpi as any)?.score ?? (kpi as any)?.completionPercentage ?? 0)))
+            )
+          : isLeader
           ? (checklistDays > 0 
               ? Math.max(0, Math.min(100, Math.round((checklistDays / expectedDays) * 100) - (lateDays * 5) - (alphaDays * 10)))
               : 0)

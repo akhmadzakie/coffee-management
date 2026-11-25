@@ -124,6 +124,8 @@ import {
   shouldAutoSeedDummyData,
   validateClientSetupPayload,
   buildCleaningSummary,
+  findUnlinkedStaffUsers,
+  buildEmployeeDraftFromUser,
 } from "../src/utils/dataCleaning";
 import {
   buildEscPosReceipt,
@@ -5904,6 +5906,34 @@ test("44e. buildCleaningSummary menghitung selisih baris yang dihapus dengan tep
   assert.strictEqual(summary.deletedByTable.orders, 24);
   assert.strictEqual(summary.deletedByTable.ingredients, 13);
   assert.strictEqual(summary.deletedByTable.expense_categories, 2);
+});
+
+test("44f. findUnlinkedStaffUsers & buildEmployeeDraftFromUser mendeteksi akun Finance/Manager untuk didaftarkan ke SDM", () => {
+  const sampleUsers = [
+    { id: "u-admin", username: "admin", name: "Super Admin", role: "SUPER_ADMIN", isSuspended: false },
+    { id: "u-owner", username: "owner", name: "Owner Cafe", role: "OWNER", isSuspended: false },
+    { id: "u-mgr", username: "manager", name: "Bu Manager", role: "MANAGER", department: "Operasional", isSuspended: false },
+    { id: "u-fin", username: "finance", name: "Pak Finance", role: "FINANCE", department: "Finance", isSuspended: false },
+    { id: "u-kasir", username: "kasir", name: "Kasir Lama", role: "KASIR", employeeId: "emp-1", isSuspended: false },
+    { id: "u-susp", username: "resign1", name: "Suspended", role: "BAR", isSuspended: true },
+  ];
+  const sampleEmployees = [{ id: "emp-1", username: "kasir" }];
+
+  const unlinked = findUnlinkedStaffUsers(sampleUsers, sampleEmployees);
+  assert.strictEqual(unlinked.length, 2);
+  assert.deepStrictEqual(
+    unlinked.map((u) => u.username),
+    ["manager", "finance"]
+  );
+
+  const mgrDraft = buildEmployeeDraftFromUser(unlinked[0], "2026-11-25");
+  assert.strictEqual(mgrDraft.position, "Manager Operasional");
+  assert.strictEqual(mgrDraft.department, "MANAGEMENT");
+  assert.strictEqual(mgrDraft.status, "AKTIF");
+
+  const finDraft = buildEmployeeDraftFromUser(unlinked[1], "2026-11-25");
+  assert.strictEqual(finDraft.position, "Finance & Accounting");
+  assert.strictEqual(finDraft.department, "Finance");
 });
 
 // -------------------------------------------------------------
