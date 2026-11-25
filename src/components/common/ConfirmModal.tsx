@@ -35,10 +35,10 @@ const variantConfig = {
   },
   info: {
     icon: Info,
-    iconBg: "bg-blue-100",
-    iconColor: "text-blue-600",
-    btnClass: "bg-blue-600 hover:bg-blue-700 focus:ring-blue-500",
-    borderClass: "border-blue-200",
+    iconBg: "bg-brand-100",
+    iconColor: "text-brand-600",
+    btnClass: "bg-brand-600 hover:bg-brand-700 focus:ring-brand-500",
+    borderClass: "border-brand-200",
   },
 };
 

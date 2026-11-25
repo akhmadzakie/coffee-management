@@ -1738,7 +1738,7 @@ const FinanceReports: React.FC = () => {
                   {/* Utilitas */}
                   <tr className="hover:bg-slate-50/50">
                     <td className="p-3 sm:px-6 pl-8 text-slate-700 flex items-center gap-2">
-                      <Zap className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                      <Zap className="w-3.5 h-3.5 text-brand-600 shrink-0" />
                       <span>Beban Utilitas (Listrik PLN, Air PDAM, Gas LPG, Wifi)</span>
                     </td>
                     <td className="p-3 text-right font-mono tabular-nums text-slate-600">

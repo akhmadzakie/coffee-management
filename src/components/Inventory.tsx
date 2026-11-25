@@ -151,11 +151,11 @@ export interface WasteReasonInfo {
 }
 
 export const WASTE_REASONS_DETAIL: WasteReasonInfo[] = [
-  { id: "KALIBRASI", label: "Kalibrasi / Dialing Espresso", badge: "bg-blue-50 text-blue-700 border-blue-200", desc: "Setting grind size & yield ekstraksi pagi" },
+  { id: "KALIBRASI", label: "Kalibrasi / Dialing Espresso", badge: "bg-brand-50 text-brand-700 border-brand-200", desc: "Setting grind size & yield ekstraksi pagi" },
   { id: "SALAH_BUAT", label: "Salah Buat Pesanan (Human Error)", badge: "bg-amber-50 text-amber-700 border-amber-200", desc: "Salah takaran, salah sirup, atau salah varian menu" },
   { id: "TUMPAH", label: "Tumpah / Overheat Steaming", badge: "bg-orange-50 text-orange-700 border-orange-200", desc: "Susu atau sirup tumpah saat operasional bar sibuk" },
   { id: "KEDALUWARSA", label: "Kedaluwarsa / Basi (Expired)", badge: "bg-rose-50 text-rose-700 border-rose-200", desc: "Melewati shelf-life atau basi di chiller" },
-  { id: "RUSAK", label: "Kemasan Rusak / Bocor", badge: "bg-red-50 text-red-700 border-red-200", desc: "Bocor kemasan supplier, pecah, atau cacat fisik" },
+  { id: "RUSAK", label: "Kemasan Rusak / Bocor", badge: "bg-rose-50 text-rose-700 border-rose-200", desc: "Bocor kemasan supplier, pecah, atau cacat fisik" },
   { id: "LAINNYA", label: "Lainnya / Kontaminasi", badge: "bg-slate-100 text-slate-700 border-slate-300", desc: "Bahan menggumpal, terkena air, atau insiden lain" },
 ];
 
@@ -285,7 +285,7 @@ const getMovementDisplayMeta = (mov: { type: string; referenceId?: string | null
         prefix: "-",
         isPositive: false,
         isWaste: false,
-        badgeClass: "bg-blue-50 text-blue-700 border-blue-200",
+        badgeClass: "bg-brand-50 text-brand-700 border-brand-200",
         qtyClass: "text-slate-800",
       };
     case "ADJUSTMENT":

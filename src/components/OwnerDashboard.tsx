@@ -1068,8 +1068,8 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
               targetProgress >= 90
                 ? "bg-gradient-to-r from-emerald-500 to-teal-400"
                 : targetProgress >= 60
-                ? "bg-gradient-to-r from-brand-600 to-indigo-500"
-                : "bg-gradient-to-r from-brand-600 to-blue-500"
+                ? "bg-gradient-to-r from-brand-600 to-brand-500"
+                : "bg-gradient-to-r from-brand-600 to-brand-500"
             }`}
           />
         </div>
@@ -1092,7 +1092,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
         >
           <div className="flex items-center justify-between mb-3">
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Total Omzet</span>
-            <div className="w-11 h-11 rounded-2xl bg-blue-50/80 text-blue-600 border border-blue-200/60 flex items-center justify-center shadow-2xs group-hover:scale-105 transition-transform">
+            <div className="w-11 h-11 rounded-2xl bg-brand-50/80 text-brand-600 border border-brand-200/60 flex items-center justify-center shadow-2xs group-hover:scale-105 transition-transform">
               <TrendingUp className="w-5 h-5 stroke-[2.2]" />
             </div>
           </div>
@@ -1170,7 +1170,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
         >
           <div className="flex items-center justify-between mb-3">
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Rata-rata Struk (ATV)</span>
-            <div className="w-11 h-11 rounded-2xl bg-indigo-50/80 text-indigo-600 border border-indigo-200/60 flex items-center justify-center shadow-2xs group-hover:scale-105 transition-transform">
+            <div className="w-11 h-11 rounded-2xl bg-brand-50/80 text-brand-600 border border-brand-200/60 flex items-center justify-center shadow-2xs group-hover:scale-105 transition-transform">
               <Receipt className="w-5 h-5 stroke-[2.2]" />
             </div>
           </div>
@@ -1514,7 +1514,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
           <div className="p-4.5 rounded-2xl bg-slate-50/80 border border-slate-200/70 hover:bg-white hover:shadow-xs transition-all">
             <div className="flex items-center justify-between mb-2">
               <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Tim Aktif</span>
-              <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 border border-indigo-200/60 flex items-center justify-center shadow-2xs">
+              <div className="w-9 h-9 rounded-xl bg-brand-50 text-brand-600 border border-brand-200/60 flex items-center justify-center shadow-2xs">
                 <Users className="w-4 h-4 stroke-[2.2]" />
               </div>
             </div>
@@ -1814,7 +1814,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
                       </div>
                       <div className="w-full h-2.5 bg-slate-200/80 rounded-full overflow-hidden">
                         <div
-                          className="h-full rounded-full bg-gradient-to-r from-brand-600 to-indigo-500 transition-all duration-700"
+                          className="h-full rounded-full bg-gradient-to-r from-brand-600 to-brand-500 transition-all duration-700"
                           style={{ width: `${pct}%` }}
                         />
                       </div>

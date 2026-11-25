@@ -1245,7 +1245,7 @@ export const Purchases = () => {
                               value: choice.key,
                               label: `Satuan Beli: ${choice.label}`,
                             }))}
-                            buttonClassName="w-full border border-indigo-200 bg-indigo-50/50 text-indigo-950 rounded-xl px-2.5 py-1.5 text-[11px] font-semibold"
+                            buttonClassName="w-full border border-brand-200 bg-brand-50/50 text-brand-950 rounded-xl px-2.5 py-1.5 text-[11px] font-semibold"
                           />
 
                           {item.unitMode === "CUSTOM" && (
@@ -1347,12 +1347,12 @@ export const Purchases = () => {
                 (purchaseMode === "MARKET" || deliveryOption === "RECEIVED") &&
                 (poHppPreview.directUpdates.length > 0 ||
                   poHppPreview.affectedVariantPreviews.length > 0) && (
-                  <div className="p-2.5 rounded-2xl bg-indigo-50/70 border border-indigo-200/80 space-y-1 text-[11px]">
-                    <div className="font-bold text-indigo-950 flex items-center gap-1.5">
-                      <Sparkles className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                  <div className="p-2.5 rounded-2xl bg-brand-50/70 border border-brand-200/80 space-y-1 text-[11px]">
+                    <div className="font-bold text-brand-950 flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-brand-600 shrink-0" />
                       <span>Sinkron HPP Otomatis (Weighted Avg):</span>
                     </div>
-                    <p className="text-[10px] text-indigo-800 leading-snug">
+                    <p className="text-[10px] text-brand-800 leading-snug">
                       {poHppPreview.directUpdates.length} bahan modal diperbarui
                       {poHppPreview.batchPrepUpdates.length > 0
                         ? ` • ${poHppPreview.batchPrepUpdates.length} batch olahan`

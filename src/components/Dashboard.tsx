@@ -95,13 +95,13 @@ export const Dashboard = ({ view }: { view: "FINANCE" | "INVENTORY" }) => {
   const getAccountIcon = (type: string) => {
     switch (type) {
       case "BANK":
-        return <Building2 className="w-5 h-5 text-indigo-500" />;
+        return <Building2 className="w-5 h-5 text-brand-500" />;
       case "SAVINGS":
         return <Landmark className="w-5 h-5 text-purple-500" />;
       case "E_WALLET":
         return <Smartphone className="w-5 h-5 text-sky-500" />;
       default:
-        return <Wallet className="w-5 h-5 text-blue-500" />;
+        return <Wallet className="w-5 h-5 text-brand-500" />;
     }
   };
 

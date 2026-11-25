@@ -719,13 +719,13 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
         {/* Card 3: Disiplin Kehadiran Staf */}
         <div
           onClick={() => setActiveDashboardTab("team")}
-          className="p-5 bg-white rounded-3xl border border-slate-200/80 shadow-coffee hover:border-indigo-300 transition-all cursor-pointer group"
+          className="p-5 bg-white rounded-3xl border border-slate-200/80 shadow-coffee hover:border-brand-300 transition-all cursor-pointer group"
         >
           <div className="flex items-center justify-between mb-3">
             <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
               Kehadiran Staf
             </span>
-            <div className="w-9 h-9 rounded-2xl bg-indigo-50 text-indigo-700 flex items-center justify-center border border-indigo-200">
+            <div className="w-9 h-9 rounded-2xl bg-brand-50 text-brand-700 flex items-center justify-center border border-brand-200">
               <Users className="w-4 h-4" />
             </div>
           </div>
@@ -737,7 +737,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
               {attendanceStats.terlambat > 0 ? `${attendanceStats.terlambat} telat` : "Tepat waktu"}
               {pendingToday.length > 0 && ` · ${pendingToday.length} perlu ACC`}
             </span>
-            <span className="text-indigo-700 font-bold group-hover:translate-x-0.5 transition-transform flex items-center gap-0.5 text-[11px]">
+            <span className="text-brand-700 font-bold group-hover:translate-x-0.5 transition-transform flex items-center gap-0.5 text-[11px]">
               Verifikasi <ArrowRight className="w-3 h-3" />
             </span>
           </div>
@@ -912,7 +912,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
               : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
           }`}
         >
-          <Users className="w-4 h-4 text-indigo-600" />
+          <Users className="w-4 h-4 text-brand-600" />
           <span>Tracking Tim & SOP</span>
           {scheduleApprovalAlerts.length > 0 && (
             <span className="px-1.5 py-0.2 rounded-full bg-amber-500 text-white text-[10px] font-black">

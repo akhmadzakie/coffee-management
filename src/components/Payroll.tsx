@@ -973,13 +973,13 @@ export function Payroll() {
             <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 border ${
               isTargetAchieved 
                 ? "bg-emerald-50 text-emerald-600 border-emerald-200/80" 
-                : "bg-indigo-50 text-indigo-600 border-indigo-200/80"
+                : "bg-brand-50 text-brand-600 border-brand-200/80"
             }`}>
               <Target className="w-4 h-4" />
             </div>
           </div>
           <div className={`text-lg sm:text-2xl font-black font-mono tracking-tight ${
-            isTargetAchieved ? "text-emerald-700" : "text-indigo-900"
+            isTargetAchieved ? "text-emerald-700" : "text-brand-900"
           }`}>
             {monthlyTarget > 0 ? `${achievementRate.toFixed(1)}%` : "Belum Diatur"}
           </div>
@@ -997,7 +997,7 @@ export function Payroll() {
             <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
               Status Pencairan
             </span>
-            <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 border border-blue-200/80 flex items-center justify-center shrink-0">
+            <div className="w-8 h-8 rounded-xl bg-brand-50 text-brand-600 border border-brand-200/80 flex items-center justify-center shrink-0">
               <CheckCircle2 className="w-4 h-4" />
             </div>
           </div>
@@ -1007,7 +1007,7 @@ export function Payroll() {
           <p className="text-[11px] text-slate-500 mt-1 flex items-center gap-1.5 flex-wrap">
             <span className="text-emerald-700 font-bold">{paidCount} Dibayar</span>
             <span>•</span>
-            <span className="text-blue-700 font-bold">{approvedCount} Sah</span>
+            <span className="text-brand-700 font-bold">{approvedCount} Sah</span>
             <span>•</span>
             <span className="text-amber-700 font-bold">{draftCount} Draft</span>
           </p>
@@ -1107,10 +1107,10 @@ export function Payroll() {
         <div className={`p-4 sm:p-5 rounded-3xl border flex flex-col lg:flex-row lg:items-center justify-between gap-4 text-xs transition-all shadow-xs ${
           isTargetAchieved 
             ? "bg-emerald-50/80 border-emerald-200 text-emerald-950" 
-            : "bg-indigo-50/70 border-indigo-200 text-indigo-950"
+            : "bg-brand-50/70 border-brand-200 text-brand-950"
         }`}>
           <div className="flex items-start sm:items-center gap-3">
-            <span className={`p-2.5 rounded-2xl text-white shadow-xs shrink-0 ${isTargetAchieved ? "bg-emerald-600" : "bg-indigo-600"}`}>
+            <span className={`p-2.5 rounded-2xl text-white shadow-xs shrink-0 ${isTargetAchieved ? "bg-emerald-600" : "bg-brand-600"}`}>
               <Target className="w-5 h-5" />
             </span>
             <div>
@@ -1120,7 +1120,7 @@ export function Payroll() {
                 <span className="text-slate-400">/</span>
                 <span className="font-mono font-bold text-slate-700">{formatCurrency(monthlyTarget)}</span>
                 <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black ${
-                  isTargetAchieved ? "bg-emerald-200 text-emerald-900 border border-emerald-300" : "bg-indigo-200 text-indigo-900 border border-indigo-300"
+                  isTargetAchieved ? "bg-emerald-200 text-emerald-900 border border-emerald-300" : "bg-brand-200 text-brand-900 border border-brand-300"
                 }`}>
                   {achievementRate.toFixed(1)}%
                 </span>
@@ -1175,7 +1175,7 @@ export function Payroll() {
                 }}
                 className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                   settings?.enableLeaderAllowanceBonus !== false
-                    ? "bg-indigo-100 text-indigo-800 hover:bg-indigo-200 border border-indigo-300"
+                    ? "bg-brand-100 text-brand-800 hover:bg-brand-200 border border-brand-300"
                     : "bg-slate-100 text-slate-500 hover:bg-slate-200 border border-slate-300"
                 } ${!canEdit ? "opacity-60 cursor-not-allowed" : ""}`}
                 title="Klik untuk aktifkan / nonaktifkan pencairan tunjangan jabatan leader"
@@ -1358,8 +1358,8 @@ export function Payroll() {
                 onClick={() => setStatusFilter("APPROVED")}
                 className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 flex items-center gap-1.5 cursor-pointer ${
                   statusFilter === "APPROVED"
-                    ? "bg-blue-600 text-white shadow-2xs"
-                    : "bg-blue-50 text-blue-800 hover:bg-blue-100 border border-blue-200/60"
+                    ? "bg-brand-600 text-white shadow-2xs"
+                    : "bg-brand-50 text-brand-800 hover:bg-brand-100 border border-brand-200/60"
                 }`}
               >
                 <CheckCircle2 className="w-3 h-3" />
@@ -1385,7 +1385,7 @@ export function Payroll() {
                 <button
                   type="button"
                   onClick={handleApproveAllDrafts}
-                  className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition-all shadow-xs flex items-center gap-1.5 cursor-pointer active:scale-95"
+                  className="px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold rounded-xl transition-all shadow-xs flex items-center gap-1.5 cursor-pointer active:scale-95"
                   title="Sahkan seluruh slip DRAFT periode ini menjadi FINAL (Disetujui)"
                 >
                   <CheckCircle2 className="w-3.5 h-3.5" />
@@ -1530,10 +1530,10 @@ export function Payroll() {
                             )}
                             {record.status === "APPROVED" && (
                               <span
-                                className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-50 text-blue-700 rounded-lg text-xs font-bold border border-blue-200"
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-brand-50 text-brand-700 rounded-lg text-xs font-bold border border-brand-200"
                                 title={`Disahkan oleh: ${record.approvedBy || "Manager"} pada ${record.approvedAt ? new Date(record.approvedAt).toLocaleDateString("id-ID") : "-"}`}
                               >
-                                <CheckCircle size={12} className="text-blue-600" /> Final (Disetujui)
+                                <CheckCircle size={12} className="text-brand-600" /> Final (Disetujui)
                               </span>
                             )}
                             {record.status === "PAID" && (
@@ -1592,7 +1592,7 @@ export function Payroll() {
                               {record.status === "DRAFT" && canApprove && !isReadOnly && !closedPeriods.some((p: any) => p.period === record.period) && (
                                 <button
                                   onClick={() => handleUpdateStatus(record, "APPROVED")}
-                                  className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded-xl font-bold transition-all shadow-2xs cursor-pointer active:scale-95 flex items-center gap-1"
+                                  className="px-2.5 py-1 bg-brand-600 hover:bg-brand-700 text-white text-xs rounded-xl font-bold transition-all shadow-2xs cursor-pointer active:scale-95 flex items-center gap-1"
                                   title="Sahkan Draf menjadi Final (Aturan #5)"
                                 >
                                   <CheckCircle2 size={13} />
@@ -1684,10 +1684,10 @@ export function Payroll() {
                           )}
                           {record.status === "APPROVED" && (
                             <span
-                              className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-50 text-blue-700 rounded-lg text-xs font-bold border border-blue-200"
+                              className="inline-flex items-center gap-1 px-2 py-0.5 bg-brand-50 text-brand-700 rounded-lg text-xs font-bold border border-brand-200"
                               title={`Disahkan oleh ${record.approvedBy || "Manager"}`}
                             >
-                              <CheckCircle className="w-3 h-3 text-blue-600" /> Disetujui
+                              <CheckCircle className="w-3 h-3 text-brand-600" /> Disetujui
                             </span>
                           )}
                           {record.status === "PAID" && (
@@ -1744,7 +1744,7 @@ export function Payroll() {
                         </div>
                         <div>
                           <span className="text-[10px] text-slate-500 block uppercase font-bold tracking-wider">Tunj. & Fasilitas</span>
-                          <span className="font-mono font-bold text-blue-700 text-xs">
+                          <span className="font-mono font-bold text-brand-700 text-xs">
                             +{formatCurrency(record.mealAllowance + (record.transportAllowance || 0) + (record.positionAllowance || 0) + (record.targetBonus || 0) + (record.kpiBonus || 0) + (record.overtimePay || 0))}
                           </span>
                         </div>
@@ -1812,7 +1812,7 @@ export function Payroll() {
                           {record.status === "DRAFT" && canApprove && !isReadOnly && !closedPeriods.some((p: any) => p.period === record.period) && (
                             <button
                               onClick={() => handleUpdateStatus(record, "APPROVED")}
-                              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition-colors shadow-2xs cursor-pointer active:scale-95"
+                              className="px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold rounded-xl transition-colors shadow-2xs cursor-pointer active:scale-95"
                             >
                               Sahkan
                             </button>
@@ -2022,7 +2022,7 @@ export function Payroll() {
                   </div>
                   <div>
                     <span className="text-[10px] text-slate-500 block uppercase font-bold">Makan & Transport</span>
-                    <span className="font-mono font-bold text-blue-700">+{formatCurrency(calculation.mealAllowance + (calculation.transportAllowance || 0))}</span>
+                    <span className="font-mono font-bold text-brand-700">+{formatCurrency(calculation.mealAllowance + (calculation.transportAllowance || 0))}</span>
                   </div>
                   {calculation.positionAllowance > 0 && (
                     <div className="col-span-2 pt-1 border-t border-slate-200/60 flex justify-between items-center text-amber-800">
@@ -2502,7 +2502,7 @@ export function Payroll() {
                 
                 {/* Ringkasan Akhir */}
                 <div className="bg-brand-gradient text-white p-4 rounded-2xl shadow-xs">
-                  <div className="flex justify-between text-xs text-blue-100 mb-1">
+                  <div className="flex justify-between text-xs text-brand-100 mb-1">
                     <span>Total Penghasilan Kotor (Gross):</span>
                     <span className="font-mono tabular-nums font-bold text-white">{formatCurrency(editingPayroll.grossPay)}</span>
                   </div>
@@ -2791,7 +2791,7 @@ export function Payroll() {
                   const net = Math.max(0, gross - deductions);
                   return (
                     <div className="bg-brand-gradient text-white p-4 rounded-2xl shadow-xs">
-                      <div className="flex justify-between text-xs text-blue-100 mb-1">
+                      <div className="flex justify-between text-xs text-brand-100 mb-1">
                         <span>Penghasilan Kotor:</span>
                         <span className="font-mono tabular-nums font-bold text-white">{formatCurrency(gross)}</span>
                       </div>
@@ -2922,7 +2922,7 @@ export function Payroll() {
                         <p className="text-[11px] text-slate-500 dark:text-slate-400 uppercase font-bold tracking-wider">Penerima</p>
                         <p className="font-black text-slate-900 dark:text-slate-100 text-base">{empName}</p>
                       </div>
-                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 dark:bg-blue-500/15 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-500/30">
+                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-brand-50 dark:bg-brand-500/15 text-brand-700 dark:text-brand-300 border border-brand-200 dark:border-brand-500/30">
                         Periode {payrollToPay.period}
                       </span>
                     </div>

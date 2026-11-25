@@ -198,7 +198,7 @@ export const CsvImportExport: React.FC<CsvImportExportProps> = ({
                   disabled={isGenerating}
                   className="flex items-center w-full px-4 py-3 text-xs sm:text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors text-left border-t border-slate-100 disabled:opacity-50 cursor-pointer"
                 >
-                  <Database className="w-4 h-4 mr-3 text-blue-500 shrink-0" />
+                  <Database className="w-4 h-4 mr-3 text-brand-500 shrink-0" />
                   Download Template & Data Saat Ini (Edit Massal)
                 </button>
               )}

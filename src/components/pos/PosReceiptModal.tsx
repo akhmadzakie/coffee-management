@@ -409,7 +409,7 @@ export const PosReceiptModal: React.FC<PosReceiptModalProps> = ({ orderData, onC
               type="button"
               onClick={handleThermalPrint}
               disabled={isPrintingThermal}
-              className="flex-1 py-3 rounded-2xl bg-gradient-to-r from-brand-600 to-indigo-600 hover:from-brand-700 hover:to-indigo-700 text-white text-xs font-bold shadow-md shadow-brand-600/25 transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+              className="flex-1 py-3 rounded-2xl bg-gradient-to-r from-brand-600 to-brand-600 hover:from-brand-700 hover:to-brand-700 text-white text-xs font-bold shadow-md shadow-brand-600/25 transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
               title="Cetak langsung ke printer thermal Bluetooth / USB tanpa dialog print browser"
             >
               <Zap className="w-4 h-4 text-amber-300 fill-amber-300" />

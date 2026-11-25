@@ -346,7 +346,7 @@ export const PosShiftModal: React.FC<PosShiftModalProps> = ({
                       closedShiftData.difference === 0
                         ? "text-emerald-700"
                         : closedShiftData.difference > 0
-                        ? "text-blue-700"
+                        ? "text-brand-700"
                         : "text-rose-700"
                     }`}
                   >
@@ -763,7 +763,7 @@ export const PosShiftModal: React.FC<PosShiftModalProps> = ({
                       difference === 0
                         ? "bg-emerald-50 border-emerald-300 text-emerald-800"
                         : difference > 0
-                        ? "bg-blue-50 border-blue-300 text-blue-800"
+                        ? "bg-brand-50 border-brand-300 text-brand-800"
                         : "bg-rose-50 border-rose-300 text-rose-800"
                     }`}
                   >

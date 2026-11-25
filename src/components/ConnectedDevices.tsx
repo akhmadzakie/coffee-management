@@ -167,10 +167,10 @@ export const ConnectedDevices: React.FC = () => {
         <div>
           <div className="flex items-center gap-2">
             <h3 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
-              <ShieldCheck className="w-5 h-5 text-blue-600" />
+              <ShieldCheck className="w-5 h-5 text-brand-600" />
               {isIndo ? "Perangkat Terhubung" : "Connected Devices"}
             </h3>
-            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">
+            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-brand-100 text-brand-800">
               {sessions.length} {isIndo ? "Aktif" : "Active"}
             </span>
           </div>
@@ -190,7 +190,7 @@ export const ConnectedDevices: React.FC = () => {
             title={isIndo ? "Segarkan daftar sesi" : "Refresh session list"}
           >
             <RefreshCw
-              className={`w-3.5 h-3.5 shrink-0 ${isLoading ? "animate-spin text-blue-600" : ""}`}
+              className={`w-3.5 h-3.5 shrink-0 ${isLoading ? "animate-spin text-brand-600" : ""}`}
             />
             <span>{isIndo ? "Segarkan" : "Refresh"}</span>
           </button>
@@ -222,12 +222,12 @@ export const ConnectedDevices: React.FC = () => {
             transition={{ duration: 0.18, ease: "easeOut" }}
             className={`p-3 rounded-lg text-xs font-medium flex items-center gap-2 ${
               actionMessage.type === "success"
-                ? "bg-blue-50 text-blue-700 border border-blue-200"
+                ? "bg-brand-50 text-brand-700 border border-brand-200"
                 : "bg-rose-50 text-rose-700 border border-rose-200"
             }`}
           >
             {actionMessage.type === "success" ? (
-              <CheckCircle2 className="w-4 h-4 text-blue-600 flex-shrink-0" />
+              <CheckCircle2 className="w-4 h-4 text-brand-600 flex-shrink-0" />
             ) : (
               <AlertTriangle className="w-4 h-4 text-rose-600 flex-shrink-0" />
             )}
@@ -293,9 +293,9 @@ export const ConnectedDevices: React.FC = () => {
             <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
               {isIndo ? "Perangkat Saat Ini" : "Current Device"}
             </label>
-            <div className="p-4 rounded-xl border-2 border-blue-500/30 bg-blue-50/40 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="p-4 rounded-xl border-2 border-brand-500/30 bg-brand-50/40 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div className="flex items-start gap-3.5">
-                <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-800 flex items-center justify-center flex-shrink-0 shadow-sm">
+                <div className="w-10 h-10 rounded-xl bg-brand-100 text-brand-800 flex items-center justify-center flex-shrink-0 shadow-sm">
                   {getDeviceIcon(currentSession.deviceType, "w-5 h-5")}
                 </div>
                 <div>
@@ -303,8 +303,8 @@ export const ConnectedDevices: React.FC = () => {
                     <h4 className="text-sm font-bold text-slate-900">
                       {currentSession.deviceName || "Perangkat Ini"}
                     </h4>
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-300">
-                      <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-ping" />
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-brand-100 text-brand-800 border border-brand-300">
+                      <span className="w-1.5 h-1.5 rounded-full bg-brand-500 animate-ping" />
                       {isIndo ? "Perangkat Ini" : "This Device"}
                     </span>
                   </div>
@@ -318,8 +318,8 @@ export const ConnectedDevices: React.FC = () => {
                       ({currentSession.username})
                     </span>
                     <span className="text-slate-300">•</span>
-                    <span className="flex items-center gap-1 text-blue-700 font-medium">
-                      <span className="w-2 h-2 rounded-full bg-blue-500" />
+                    <span className="flex items-center gap-1 text-brand-700 font-medium">
+                      <span className="w-2 h-2 rounded-full bg-brand-500" />
                       {isIndo ? "Aktif sekarang" : "Active now"}
                     </span>
                     {currentSession.ipAddress && (
@@ -344,7 +344,7 @@ export const ConnectedDevices: React.FC = () => {
               </div>
 
               <div className="flex sm:flex-col items-end justify-between sm:justify-center">
-                <span className="text-[11px] font-medium text-blue-700 bg-blue-100/80 px-2.5 py-1 rounded-md">
+                <span className="text-[11px] font-medium text-brand-700 bg-brand-100/80 px-2.5 py-1 rounded-md">
                   {isIndo ? "Sesi Aktif Utama" : "Primary Active Session"}
                 </span>
               </div>
@@ -363,7 +363,7 @@ export const ConnectedDevices: React.FC = () => {
                 </p>
               </div>
             </div>
-            <span className="text-xs text-blue-600 font-medium">
+            <span className="text-xs text-brand-600 font-medium">
               {isIndo ? "Aktif" : "Active"}
             </span>
           </div>
@@ -500,7 +500,7 @@ export const ConnectedDevices: React.FC = () => {
 
       {/* Security notice footer */}
       <div className="pt-4 border-t border-slate-100 flex items-start gap-2.5 text-xs text-slate-500 bg-slate-50/70 p-3 rounded-lg">
-        <Lock className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
+        <Lock className="w-4 h-4 text-brand-600 flex-shrink-0 mt-0.5" />
         <p>
           {isIndo
             ? 'Jika Anda melihat perangkat atau aktivitas yang mencurigakan, segera klik "Putus Sesi" untuk mengeluarkan akun tersebut dari sistem dan perbarui PIN Anda di menu Pengguna.'

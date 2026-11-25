@@ -348,15 +348,15 @@ export const PromotionsManagement: React.FC = () => {
           <p className="text-xs text-purple-600 mt-1">Diskon berbasis %</p>
         </div>
 
-        <div className="bg-white p-4 rounded-2xl border border-blue-100 bg-gradient-to-br from-white to-blue-50/30 shadow-xs">
+        <div className="bg-white p-4 rounded-2xl border border-brand-100 bg-gradient-to-br from-white to-brand-50/30 shadow-xs">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-blue-700 uppercase tracking-wider">Potongan Flat</span>
-            <div className="p-2 bg-blue-100 text-blue-600 rounded-lg">
+            <span className="text-xs font-semibold text-brand-700 uppercase tracking-wider">Potongan Flat</span>
+            <div className="p-2 bg-brand-100 text-brand-600 rounded-lg">
               <RupiahSign className="w-4 h-4" />
             </div>
           </div>
-          <div className="mt-2 text-2xl font-bold text-blue-800">{nominalCount}</div>
-          <p className="text-xs text-blue-600 mt-1">Potongan flat Rp</p>
+          <div className="mt-2 text-2xl font-bold text-brand-800">{nominalCount}</div>
+          <p className="text-xs text-brand-600 mt-1">Potongan flat Rp</p>
         </div>
 
         <div className={`p-4 rounded-2xl border shadow-xs ${expiredCount > 0
@@ -462,7 +462,7 @@ export const PromotionsManagement: React.FC = () => {
                           <div
                             className={`p-2 rounded-xl shrink-0 mt-0.5 ${promo.type === "PERCENT"
                                 ? "bg-purple-100 text-purple-700"
-                                : "bg-blue-100 text-blue-700"
+                                : "bg-brand-100 text-brand-700"
                               }`}
                           >
                             {promo.type === "PERCENT" ? (
@@ -504,7 +504,7 @@ export const PromotionsManagement: React.FC = () => {
                           </div>
                         ) : (
                           <div>
-                            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-brand-50 text-brand-700 border border-brand-200">
                               -Rp {promo.value.toLocaleString("id-ID")}
                             </span>
                             <p className="text-[11px] text-slate-400 mt-1">Potongan tetap</p>
@@ -771,7 +771,7 @@ export const PromotionsManagement: React.FC = () => {
                       type="button"
                       onClick={() => setFormData({ ...formData, type: "NOMINAL" })}
                       className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl border text-sm font-medium transition-all ${formData.type === "NOMINAL"
-                          ? "bg-blue-50 border-blue-300 text-blue-700 font-bold"
+                          ? "bg-brand-50 border-brand-300 text-brand-700 font-bold"
                           : "border-slate-200 text-slate-600 hover:bg-slate-50"
                         }`}
                     >

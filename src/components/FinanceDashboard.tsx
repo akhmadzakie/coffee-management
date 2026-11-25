@@ -415,7 +415,7 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ onNavigate }
       {/* ─── Finance AI Copilot Hub (Bookkeeping & Smart OCR) ─────────────── */}
       <div className="relative overflow-hidden rounded-3xl bg-brand-gradient text-white p-5 sm:p-6 shadow-xl border border-brand-700/60">
         <div className="absolute -top-24 -right-24 w-72 h-72 rounded-full bg-brand-500/20 blur-3xl pointer-events-none" />
-        <div className="absolute -bottom-24 -left-24 w-72 h-72 rounded-full bg-indigo-500/15 blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-24 -left-24 w-72 h-72 rounded-full bg-brand-500/15 blur-3xl pointer-events-none" />
 
         <div className="relative z-10 space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">

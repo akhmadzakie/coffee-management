@@ -1047,7 +1047,7 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
                           category: bahanCat ? bahanCat.name : tx.category,
                         });
                       }}
-                      icon={<Package className="w-3 h-3 text-indigo-600" />}
+                      icon={<Package className="w-3 h-3 text-brand-600" />}
                       placeholder="-- Kaitkan Bahan Baku --"
                       options={[
                         { value: "", label: "-- Kaitkan Bahan Baku --" },
@@ -1056,7 +1056,7 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
                           label: `${ing.name} (${ing.purchaseUnit || ing.unit})`,
                         })),
                       ]}
-                      buttonClassName="px-2 py-1 rounded-lg bg-indigo-50 border border-indigo-200 text-[11px] font-semibold text-indigo-900 max-w-[200px]"
+                      buttonClassName="px-2 py-1 rounded-lg bg-brand-50 border border-brand-200 text-[11px] font-semibold text-brand-900 max-w-[200px]"
                     />
                     {matchedIng && (
                       <>
@@ -1087,7 +1087,7 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
                           placeholder="Satuan"
                           buttonClassName="px-2 py-1 rounded-lg bg-brand-50 border border-brand-200 text-[11px] font-semibold text-brand-900 max-w-[180px]"
                         />
-                        <span className="text-[10px] font-mono text-indigo-700 whitespace-nowrap px-2 py-1 rounded-lg bg-indigo-50/70 border border-indigo-200/70">
+                        <span className="text-[10px] font-mono text-brand-700 whitespace-nowrap px-2 py-1 rounded-lg bg-brand-50/70 border border-brand-200/70">
                           +{qtyVal} {unitLabel}
                           {factor > 1
                             ? ` = ${(qtyVal * factor).toLocaleString("id-ID")} ${matchedIng.unit}`
@@ -1163,27 +1163,27 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
     return (
       <div className="space-y-3 pt-1">
         {hasLinkedIngredient && (
-          <div className="p-3.5 rounded-2xl bg-indigo-50/60 border border-indigo-200/80 space-y-2.5 text-xs">
+          <div className="p-3.5 rounded-2xl bg-brand-50/60 border border-brand-200/80 space-y-2.5 text-xs">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <label className="flex items-center gap-2 font-semibold text-indigo-950 cursor-pointer">
+              <label className="flex items-center gap-2 font-semibold text-brand-950 cursor-pointer">
                 <input
                   type="checkbox"
                   checked={syncHppFromAi}
                   onChange={(e) => setSyncHppFromAi(e.target.checked)}
-                  className="rounded text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5"
+                  className="rounded text-brand-600 focus:ring-brand-500 w-3.5 h-3.5"
                 />
-                <RefreshCw className="w-3.5 h-3.5 text-indigo-600" />
+                <RefreshCw className="w-3.5 h-3.5 text-brand-600" />
                 <span>Update Harga Modal Bahan & Sinkronkan HPP Menu</span>
               </label>
 
               {syncHppFromAi && (
-                <div className="flex items-center gap-1 bg-white p-0.5 rounded-lg border border-indigo-200 self-start sm:self-auto">
+                <div className="flex items-center gap-1 bg-white p-0.5 rounded-lg border border-brand-200 self-start sm:self-auto">
                   <button
                     type="button"
                     onClick={() => setAiPriceSyncMethod("LAST_PRICE")}
                     className={`px-2 py-1 rounded-md text-[10px] font-bold transition-colors cursor-pointer ${
                       aiPriceSyncMethod === "LAST_PRICE"
-                        ? "bg-indigo-600 text-white"
+                        ? "bg-brand-600 text-white"
                         : "text-slate-600 hover:bg-slate-100"
                     }`}
                   >
@@ -1194,7 +1194,7 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
                     onClick={() => setAiPriceSyncMethod("WEIGHTED_AVERAGE")}
                     className={`px-2 py-1 rounded-md text-[10px] font-bold transition-colors cursor-pointer ${
                       aiPriceSyncMethod === "WEIGHTED_AVERAGE"
-                        ? "bg-indigo-600 text-white"
+                        ? "bg-brand-600 text-white"
                         : "text-slate-600 hover:bg-slate-100"
                     }`}
                   >
@@ -1222,17 +1222,17 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
             </label>
 
             {syncHppFromAi && hasPreviewItems && (
-              <div className="bg-white/90 rounded-xl p-2.5 border border-indigo-200/70 space-y-1.5 text-[11px]">
+              <div className="bg-white/90 rounded-xl p-2.5 border border-brand-200/70 space-y-1.5 text-[11px]">
                 {hppPreview.directUpdates.length > 0 && (
                   <div className="space-y-1">
-                    <span className="font-bold text-[10px] uppercase tracking-wider text-indigo-700">
+                    <span className="font-bold text-[10px] uppercase tracking-wider text-brand-700">
                       Dampak Harga Modal Bahan:
                     </span>
                     <div className="flex flex-wrap gap-1.5">
                       {hppPreview.directUpdates.map((upd) => (
                         <span
                           key={upd.ingredient.id}
-                          className="px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-900 border border-indigo-100 font-mono text-[10px]"
+                          className="px-2 py-0.5 rounded-md bg-brand-50 text-brand-900 border border-brand-100 font-mono text-[10px]"
                         >
                           {upd.ingredient.name}: {formatCurrency(Math.round(upd.oldCostPerUnit))} {"->"}{" "}
                           <strong>{formatCurrency(Math.round(upd.newCostPerUnit))}</strong>/{upd.ingredient.unit}
@@ -1425,7 +1425,7 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
         {activeTab === "quick-input" && (
           <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5 bg-[#F8F9FA] custom-scrollbar">
             {/* Header Banner */}
-            <div className="rounded-2xl p-4 bg-gradient-to-r from-brand-50 to-indigo-50/50 border border-brand-200/80 text-xs text-brand-950 leading-relaxed shadow-2xs flex items-start gap-3">
+            <div className="rounded-2xl p-4 bg-gradient-to-r from-brand-50 to-brand-50/50 border border-brand-200/80 text-xs text-brand-950 leading-relaxed shadow-2xs flex items-start gap-3">
               <div className="w-8 h-8 rounded-xl bg-white border border-brand-200 flex items-center justify-center shrink-0 text-brand-600 mt-0.5 shadow-2xs">
                 <Zap className="w-4 h-4 text-amber-500 fill-amber-500" />
               </div>

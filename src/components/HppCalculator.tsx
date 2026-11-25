@@ -2340,7 +2340,7 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                     type="button"
                     onClick={handleAskGeminiAi}
                     disabled={isAiLoading}
-                    className="w-full py-2.5 bg-gradient-to-r from-brand-600 to-indigo-700 hover:from-brand-700 hover:to-indigo-800 active:scale-[0.98] text-white font-bold rounded-2xl text-xs transition-all flex items-center justify-center gap-2 shadow-xs disabled:opacity-50 cursor-pointer"
+                    className="w-full py-2.5 bg-gradient-to-r from-brand-600 to-brand-700 hover:from-brand-700 hover:to-brand-800 active:scale-[0.98] text-white font-bold rounded-2xl text-xs transition-all flex items-center justify-center gap-2 shadow-xs disabled:opacity-50 cursor-pointer"
                   >
                     <Sparkles className="w-4 h-4 text-amber-300" />
                     {isAiLoading ? "Menganalisis Komposisi Resep..." : "Analisis Resep & Rekomendasi AI Gemini"}

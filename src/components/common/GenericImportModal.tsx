@@ -346,7 +346,7 @@ export const GenericImportModal: React.FC<GenericImportModalProps> = ({
           {step === "done" && importedCount > 0 && (
             <button
               onClick={onClose}
-              className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-sm shadow-sm transition-colors"
+              className="px-6 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl text-sm shadow-sm transition-colors"
             >
               Selesai
             </button>

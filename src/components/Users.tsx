@@ -509,8 +509,8 @@ export const UsersComponent = () => {
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
         {/* Info banner untuk MANAGER */}
         {isManager && (
-          <div className="flex items-center gap-2 px-5 py-3 bg-blue-50 border-b border-blue-100 text-blue-700 text-xs">
-            <ShieldCheck className="w-4 h-4 shrink-0 text-blue-500" />
+          <div className="flex items-center gap-2 px-5 py-3 bg-brand-50 border-b border-brand-100 text-brand-700 text-xs">
+            <ShieldCheck className="w-4 h-4 shrink-0 text-brand-500" />
             <span>
               <strong>Mode Manager:</strong> Anda hanya dapat mengelola akun dengan role <strong>Kasir, Leader, Bar, Kitchen, dan Baker</strong>.
             </span>
@@ -592,7 +592,7 @@ export const UsersComponent = () => {
                         <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-bold ${
                           user.role === "SUPER_ADMIN" ? "bg-rose-100 text-rose-700" :
                           user.role === "OWNER"       ? "bg-purple-100 text-purple-700" :
-                          user.role === "MANAGER"     ? "bg-blue-100 text-blue-700" :
+                          user.role === "MANAGER"     ? "bg-brand-100 text-brand-700" :
                           user.role === "FINANCE"     ? "bg-emerald-100 text-emerald-700" :
                           user.role === "LEADER"      ? "bg-amber-100 text-amber-700" :
                           "bg-slate-100 text-slate-700"
@@ -711,7 +711,7 @@ export const UsersComponent = () => {
                   <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-[11px] font-bold shrink-0 ${
                     user.role === "SUPER_ADMIN" ? "bg-rose-100 text-rose-700" :
                     user.role === "OWNER"       ? "bg-purple-100 text-purple-700" :
-                    user.role === "MANAGER"     ? "bg-blue-100 text-blue-700" :
+                    user.role === "MANAGER"     ? "bg-brand-100 text-brand-700" :
                     user.role === "FINANCE"     ? "bg-emerald-100 text-emerald-700" :
                     user.role === "LEADER"      ? "bg-amber-100 text-amber-700" :
                     "bg-slate-100 text-slate-700"

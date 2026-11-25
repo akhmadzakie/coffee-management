@@ -197,13 +197,13 @@ export const SwitchAccountModal: React.FC<SwitchAccountModalProps> = ({
       case "OWNER":
         return { label: "Owner", color: "text-brand-700 bg-brand-50 border-brand-200/80" };
       case "MANAGER":
-        return { label: "Manager", color: "text-indigo-800 bg-indigo-50 border-indigo-200" };
+        return { label: "Manager", color: "text-brand-800 bg-brand-50 border-brand-200" };
       case "FINANCE":
-        return { label: "Finance", color: "text-blue-800 bg-blue-50 border-blue-200" };
+        return { label: "Finance", color: "text-brand-800 bg-brand-50 border-brand-200" };
       case "KASIR":
         return { label: "Kasir", color: "text-emerald-800 bg-emerald-50 border-emerald-200" };
       case "LEADER":
-        return { label: "Leader", color: "text-indigo-800 bg-indigo-50 border-indigo-200" };
+        return { label: "Leader", color: "text-brand-800 bg-brand-50 border-brand-200" };
       default:
         return { label: role || "Staff", color: "text-slate-700 bg-slate-100 border-slate-200" };
     }

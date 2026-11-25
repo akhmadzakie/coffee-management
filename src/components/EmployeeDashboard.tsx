@@ -466,32 +466,32 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
     <div className="space-y-6 pb-12 max-w-7xl mx-auto">
       {/* ─── 1. GREETING & IDENTITY BANNER ─── */}
       <div className="relative overflow-hidden bg-brand-gradient text-white rounded-3xl p-6 sm:p-8 shadow-xl border border-brand-700/60">
-        <div className="absolute top-0 right-0 -mr-16 -mt-16 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute bottom-0 right-20 -mb-16 w-64 h-64 bg-indigo-500/15 rounded-full blur-2xl pointer-events-none" />
+        <div className="absolute top-0 right-0 -mr-16 -mt-16 w-64 h-64 bg-brand-500/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute bottom-0 right-20 -mb-16 w-64 h-64 bg-brand-500/15 rounded-full blur-2xl pointer-events-none" />
 
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="flex items-center gap-4">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center font-black text-2xl text-white shadow-lg shadow-blue-500/25 shrink-0 border border-white/20">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center font-black text-2xl text-white shadow-lg shadow-brand-500/25 shrink-0 border border-white/20">
               {currentUser?.name ? currentUser.name.charAt(0).toUpperCase() : "U"}
             </div>
             <div>
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-blue-300 font-semibold text-xs tracking-wider uppercase">
+                <span className="text-brand-300 font-semibold text-xs tracking-wider uppercase">
                   {greeting},
                 </span>
-                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-white/10 backdrop-blur-md border border-white/15 text-blue-200">
+                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-white/10 backdrop-blur-md border border-white/15 text-brand-200">
                   {currentUser?.role || "Staff"}
                 </span>
                 {activeEmployee?.department ? (
-                  <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-500/20 text-blue-300 border border-blue-400/20">
+                  <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-brand-500/20 text-brand-300 border border-brand-400/20">
                     Divisi {activeEmployee.department}
                   </span>
                 ) : currentUser?.department ? (
-                  <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-500/20 text-blue-300 border border-blue-400/20">
+                  <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-brand-500/20 text-brand-300 border border-brand-400/20">
                     Divisi {currentUser.department}
                   </span>
                 ) : myDivision ? (
-                  <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-500/20 text-blue-300 border border-blue-400/20">
+                  <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-brand-500/20 text-brand-300 border border-brand-400/20">
                     Divisi {myDivision}
                   </span>
                 ) : null}
@@ -500,7 +500,7 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
                 {currentUser?.name || "Karyawan"}
               </h1>
               <p className="text-xs sm:text-sm text-slate-300 mt-1 flex items-center gap-2">
-                <Calendar className="w-3.5 h-3.5 text-blue-400" />
+                <Calendar className="w-3.5 h-3.5 text-brand-400" />
                 {now.toLocaleDateString("id-ID", {
                   weekday: "long",
                   day: "numeric",
@@ -515,7 +515,7 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
           <div className="flex items-center gap-2.5 shrink-0 flex-nowrap overflow-x-auto no-scrollbar">
             <button
               onClick={() => onNavigate("attendance_clock")}
-              className="whitespace-nowrap px-4 py-2.5 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-blue-600/30 flex items-center gap-2 shrink-0 cursor-pointer"
+              className="whitespace-nowrap px-4 py-2.5 bg-brand-600 hover:bg-brand-500 active:bg-brand-700 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-brand-600/30 flex items-center gap-2 shrink-0 cursor-pointer"
             >
               <Camera className="w-4 h-4 shrink-0" />
               <span>{isClockedIn && !isClockedOut ? "Absen Pulang (Clock Out)" : "Absen Masuk (Clock In)"}</span>
@@ -637,7 +637,7 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
         <div>
           <div className="flex items-center justify-between mb-2.5">
             <span className="text-xs font-bold text-slate-600 uppercase tracking-wider flex items-center gap-1.5">
-              <Calendar className="w-3.5 h-3.5 text-blue-600" />
+              <Calendar className="w-3.5 h-3.5 text-brand-600" />
               Jadwal Shift 7 Hari Anda:
             </span>
             <span className="text-[11px] text-slate-400">
@@ -657,21 +657,21 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
                   key={roster.dateStr || idx}
                   className={`p-3 rounded-xl border flex flex-col justify-between transition-all relative ${
                     roster.isToday
-                      ? "bg-blue-50/70 border-blue-400 shadow-sm ring-2 ring-blue-400/30"
+                      ? "bg-brand-50/70 border-brand-400 shadow-sm ring-2 ring-brand-400/30"
                       : isOff
                       ? "bg-slate-50 border-slate-200/70 opacity-70"
                       : "bg-white border-slate-200/90 hover:border-slate-300 shadow-2xs"
                   }`}
                 >
                   {roster.isToday && (
-                    <span className="absolute -top-2 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-blue-600 text-white font-black text-[9px] rounded-full uppercase tracking-wider shadow-2xs">
+                    <span className="absolute -top-2 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-brand-600 text-white font-black text-[9px] rounded-full uppercase tracking-wider shadow-2xs">
                       HARI INI
                     </span>
                   )}
 
                   <div>
                     <div className="flex items-center justify-between text-xs mb-1">
-                      <span className={`font-bold ${roster.isToday ? "text-blue-900" : "text-slate-700"}`}>
+                      <span className={`font-bold ${roster.isToday ? "text-brand-900" : "text-slate-700"}`}>
                         {roster.dayName}
                       </span>
                       <span className="text-[11px] font-mono text-slate-400 font-semibold">
@@ -684,7 +684,7 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
                         isPagi
                           ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
                           : isMiddle
-                          ? "bg-blue-100 text-blue-800 border border-blue-200"
+                          ? "bg-brand-100 text-brand-800 border border-brand-200"
                           : isSore
                           ? "bg-amber-100 text-amber-800 border border-amber-200"
                           : "bg-slate-100 text-slate-500 border border-slate-200"
@@ -786,9 +786,9 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
           <div className="p-4 rounded-xl bg-slate-50 border border-slate-100">
             <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
               <span>Total Jam Kerja</span>
-              <Clock className="w-3.5 h-3.5 text-blue-500" />
+              <Clock className="w-3.5 h-3.5 text-brand-500" />
             </div>
-            <div className="text-lg font-black text-blue-700 font-mono tabular-nums">
+            <div className="text-lg font-black text-brand-700 font-mono tabular-nums">
               {todayAttendance?.clockInTime && todayAttendance?.clockOutTime
                 ? `${calculateWorkDurationHours(todayAttendance.clockInTime, todayAttendance.clockOutTime).toFixed(1)} Jam`
                 : isClockedIn
@@ -832,10 +832,10 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
 
       {/* ─── 3. KHUSUS LEADER: MONITORING DIVISI & JOBDESK TIM ─── */}
       {isLeader && checklistProgress && (
-        <div className="bg-gradient-to-br from-indigo-50/80 via-white to-blue-50/50 rounded-2xl p-6 border border-indigo-100 shadow-xs">
+        <div className="bg-gradient-to-br from-brand-50/80 via-white to-brand-50/50 rounded-2xl p-6 border border-brand-100 shadow-xs">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
             <div className="flex items-center gap-3">
-              <div className="p-2.5 rounded-xl bg-indigo-600 text-white shadow-sm shadow-indigo-500/20">
+              <div className="p-2.5 rounded-xl bg-brand-600 text-white shadow-sm shadow-brand-500/20">
                 <Coffee className="w-5 h-5" />
               </div>
               <div>
@@ -843,7 +843,7 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
                   <h3 className="text-base font-bold text-slate-900">
                     Monitoring Operasional Tim Divisi {leaderDivision === "BAR" ? "Bar & Kasir" : leaderDivision}
                   </h3>
-                  <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 font-bold text-[10px] rounded-md uppercase">
+                  <span className="px-2 py-0.5 bg-brand-100 text-brand-700 font-bold text-[10px] rounded-md uppercase">
                     Portal Leader
                   </span>
                 </div>
@@ -859,14 +859,14 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
                   sessionStorage.setItem("hr_target_tab", "schedule");
                   onNavigate("hr");
                 }}
-                className="px-4 py-2 bg-white hover:bg-slate-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold transition-all shadow-2xs flex items-center gap-1.5 cursor-pointer"
+                className="px-4 py-2 bg-white hover:bg-slate-100 text-brand-700 border border-brand-200 rounded-xl text-xs font-bold transition-all shadow-2xs flex items-center gap-1.5 cursor-pointer"
               >
-                <Clock className="w-4 h-4 text-indigo-600" />
+                <Clock className="w-4 h-4 text-brand-600" />
                 <span>Atur Jadwal Shift Tim →</span>
               </button>
               <button
                 onClick={() => onNavigate("leader_checklist")}
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-1.5"
+                className="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-1.5"
               >
                 <ClipboardList className="w-4 h-4" />
                 <span>Kelola Checklist Divisi →</span>
@@ -876,13 +876,13 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Progress Jobdesk Hari Ini */}
-            <div className="lg:col-span-1 bg-white rounded-xl p-5 border border-indigo-100 shadow-2xs flex flex-col justify-between">
+            <div className="lg:col-span-1 bg-white rounded-xl p-5 border border-brand-100 shadow-2xs flex flex-col justify-between">
               <div>
                 <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
                   Progres Jobdesk Hari Ini
                 </span>
                 <div className="flex items-baseline justify-between mt-2 mb-2">
-                  <span className="text-3xl font-black text-indigo-900 font-mono">
+                  <span className="text-3xl font-black text-brand-900 font-mono">
                     {checklistProgress.percentage}%
                   </span>
                   <span className="text-xs font-semibold text-slate-600">
@@ -897,7 +897,7 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
                       checklistProgress.percentage === 100
                         ? "bg-emerald-500"
                         : checklistProgress.percentage >= 50
-                        ? "bg-indigo-600"
+                        ? "bg-brand-600"
                         : "bg-amber-500"
                     }`}
                     style={{ width: `${checklistProgress.percentage}%` }}
@@ -922,10 +922,10 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
             </div>
 
             {/* Rekap Absensi Anggota Tim Divisi Hari Ini */}
-            <div className="lg:col-span-2 bg-white rounded-xl p-5 border border-indigo-100 shadow-2xs">
+            <div className="lg:col-span-2 bg-white rounded-xl p-5 border border-brand-100 shadow-2xs">
               <div className="flex items-center justify-between mb-3">
                 <span className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
-                  <Users className="w-4 h-4 text-indigo-600" />
+                  <Users className="w-4 h-4 text-brand-600" />
                   Kehadiran Tim {leaderDivision === "BAR" ? "Bar & Kasir" : leaderDivision} ({divisionTeam.length} Staf)
                 </span>
                 <span className="text-[11px] text-slate-400">Hari ini</span>
@@ -943,7 +943,7 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
                       className="flex items-center justify-between p-2.5 rounded-lg border border-slate-100 hover:bg-slate-50/80 transition-colors text-xs"
                     >
                       <div className="flex items-center gap-2.5">
-                        <div className="w-7 h-7 rounded-full bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center text-xs">
+                        <div className="w-7 h-7 rounded-full bg-brand-100 text-brand-700 font-bold flex items-center justify-center text-xs">
                           {member.employee.name.charAt(0).toUpperCase()}
                         </div>
                         <div>
@@ -1010,7 +1010,7 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
                 })}
               </p>
             </div>
-            <span className="px-2.5 py-1 bg-blue-50 text-blue-700 font-bold text-xs rounded-lg">
+            <span className="px-2.5 py-1 bg-brand-50 text-brand-700 font-bold text-xs rounded-lg">
               {monthlyStats.totalDays} Catatan
             </span>
           </div>
@@ -1032,12 +1032,12 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
               <span className="text-xs font-semibold text-amber-700">Terlambat</span>
             </div>
 
-            <div className="p-4 rounded-xl bg-blue-50/70 border border-blue-100 text-center">
-              <Info className="w-5 h-5 text-blue-600 mx-auto mb-1.5" />
-              <div className="text-2xl font-black text-blue-900 font-mono">
+            <div className="p-4 rounded-xl bg-brand-50/70 border border-brand-100 text-center">
+              <Info className="w-5 h-5 text-brand-600 mx-auto mb-1.5" />
+              <div className="text-2xl font-black text-brand-900 font-mono">
                 {monthlyStats.sickLeave}
               </div>
-              <span className="text-xs font-semibold text-blue-700">Izin / Sakit</span>
+              <span className="text-xs font-semibold text-brand-700">Izin / Sakit</span>
             </div>
 
             <div className="p-4 rounded-xl bg-rose-50/70 border border-rose-100 text-center">
@@ -1209,13 +1209,13 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
 
             <div className="space-y-4">
               {/* Progress Omset Toko */}
-              <div className="p-4 rounded-2xl bg-gradient-to-br from-indigo-50/90 via-blue-50/50 to-slate-50 border border-indigo-100/90">
+              <div className="p-4 rounded-2xl bg-gradient-to-br from-brand-50/90 via-brand-50/50 to-slate-50 border border-brand-100/90">
                 <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-[11px] font-bold text-indigo-900 uppercase tracking-wider flex items-center gap-1.5">
-                    <TrendingUp className="w-3.5 h-3.5 text-indigo-600" />
+                  <span className="text-[11px] font-bold text-brand-900 uppercase tracking-wider flex items-center gap-1.5">
+                    <TrendingUp className="w-3.5 h-3.5 text-brand-600" />
                     Penjualan Toko Saat Ini
                   </span>
-                  <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-800 font-mono">
+                  <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-brand-100 text-brand-800 font-mono">
                     {revenueAchievementRate.toFixed(1)}%
                   </span>
                 </div>
@@ -1238,8 +1238,8 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
                       isRevenueTargetAchieved
                         ? "bg-emerald-500"
                         : revenueAchievementRate >= 70
-                        ? "bg-blue-600"
-                        : "bg-indigo-600"
+                        ? "bg-brand-600"
+                        : "bg-brand-600"
                     }`}
                     style={{ width: `${Math.min(100, revenueAchievementRate)}%` }}
                   />
@@ -1268,7 +1268,7 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
                     ) : isRevenueTargetAchieved ? (
                       <span className="text-emerald-800 font-medium">🎉 Selamat! Omset toko telah tembus target. Bonus siap masuk ke slip gaji bulan ini bersama seluruh rekan tim!</span>
                     ) : (
-                      <span className="text-slate-600">Kurang <strong className="font-mono text-indigo-700 tabular-nums">{formatCurrency(Math.max(0, monthlyRevenueTarget - periodSales))}</strong> lagi agar bonus omset cair ke seluruh staf. Terus upselling & jaga kepuasan tamu!</span>
+                      <span className="text-slate-600">Kurang <strong className="font-mono text-brand-700 tabular-nums">{formatCurrency(Math.max(0, monthlyRevenueTarget - periodSales))}</strong> lagi agar bonus omset cair ke seluruh staf. Terus upselling & jaga kepuasan tamu!</span>
                     )}
                   </p>
                 </div>
@@ -1281,13 +1281,13 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
 
               {/* Komponen Tunjangan Leader (Khusus jika Karyawan bertindak sebagai Leader) */}
               {isLeader && (
-                <div className="p-3.5 bg-gradient-to-r from-indigo-50 to-blue-50 border border-indigo-200/80 rounded-xl space-y-1.5">
+                <div className="p-3.5 bg-gradient-to-r from-brand-50 to-brand-50 border border-brand-200/80 rounded-xl space-y-1.5">
                   <div className="flex items-center justify-between text-xs">
-                    <span className="font-bold text-indigo-900 flex items-center gap-1.5">
-                      <ShieldCheck className="w-4 h-4 text-indigo-600" />
+                    <span className="font-bold text-brand-900 flex items-center gap-1.5">
+                      <ShieldCheck className="w-4 h-4 text-brand-600" />
                       Tunjangan Posisi Leader ({leaderDivision})
                     </span>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-indigo-100 text-indigo-800">
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-brand-100 text-brand-800">
                       Aktif ✓
                     </span>
                   </div>
@@ -1358,7 +1358,7 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
               return (
                 <div
                   key={pay.id}
-                  className="p-5 rounded-2xl border border-slate-200/90 hover:border-indigo-300 hover:shadow-md transition-all bg-gradient-to-br from-white to-slate-50/60 flex flex-col justify-between"
+                  className="p-5 rounded-2xl border border-slate-200/90 hover:border-brand-300 hover:shadow-md transition-all bg-gradient-to-br from-white to-slate-50/60 flex flex-col justify-between"
                 >
                   <div>
                     <div className="flex items-start justify-between gap-2 mb-3">
@@ -1375,7 +1375,7 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
                           pay.status === "PAID"
                             ? "bg-emerald-100 text-emerald-800"
                             : pay.status === "APPROVED"
-                            ? "bg-blue-100 text-blue-800"
+                            ? "bg-brand-100 text-brand-800"
                             : "bg-amber-100 text-amber-800"
                         }`}
                       >

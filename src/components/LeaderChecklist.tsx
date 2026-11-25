@@ -1106,7 +1106,7 @@ export const LeaderChecklist: React.FC = () => {
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-4 sm:p-5 rounded-3xl border border-slate-200/80 shadow-xs">
           <div>
             <div className="flex items-center gap-2">
-              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-100 text-blue-700">
+              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-brand-100 text-brand-700">
                 Supervisor Dashboard
               </span>
               <h2 className="text-xl font-bold text-slate-800">
@@ -1139,7 +1139,7 @@ export const LeaderChecklist: React.FC = () => {
                   : "text-slate-600 hover:text-slate-900"
               }`}
             >
-              <TrendingUp className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-600 shrink-0" />
+              <TrendingUp className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-brand-600 shrink-0" />
               <span>Rekap Bulanan</span>
             </button>
             <button
@@ -1219,7 +1219,7 @@ export const LeaderChecklist: React.FC = () => {
                     onClick={() => setInspectedDivision(div.key)}
                     className={`p-5 rounded-2xl border transition-all cursor-pointer bg-white flex flex-col justify-between ${
                       inspectedDivision === div.key
-                        ? "border-blue-500 ring-2 ring-blue-500/20 shadow-md"
+                        ? "border-brand-500 ring-2 ring-brand-500/20 shadow-md"
                         : "border-slate-200 hover:border-slate-300 hover:shadow-sm"
                     }`}
                   >
@@ -1293,7 +1293,7 @@ export const LeaderChecklist: React.FC = () => {
                               : div.percentage >= 80
                               ? "bg-amber-500 text-white"
                               : div.percentage >= 70
-                              ? "bg-blue-600 text-white"
+                              ? "bg-brand-600 text-white"
                               : "bg-slate-400 text-white"
                           }`}>
                             {div.percentage}% Selesai
@@ -1334,7 +1334,7 @@ export const LeaderChecklist: React.FC = () => {
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-4 border-b border-slate-100">
                 <div>
                   <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                    <ClipboardList className="w-5 h-5 text-blue-600" />
+                    <ClipboardList className="w-5 h-5 text-brand-600" />
                     Rincian Tugas Pengawasan: {selectedDivisionStat.label}
                   </h3>
                   <p className="text-xs text-slate-500 mt-0.5">
@@ -1574,7 +1574,7 @@ export const LeaderChecklist: React.FC = () => {
                             div.monthlyEffectiveScore >= 90
                               ? "bg-emerald-50 text-emerald-700 border-emerald-300"
                               : div.monthlyEffectiveScore >= 80
-                              ? "bg-blue-50 text-blue-700 border-blue-300"
+                              ? "bg-brand-50 text-brand-700 border-brand-300"
                               : div.monthlyEffectiveScore >= 70
                               ? "bg-amber-50 text-amber-700 border-amber-300"
                               : "bg-rose-50 text-rose-700 border-rose-300"
@@ -1744,7 +1744,7 @@ export const LeaderChecklist: React.FC = () => {
                                 }
                                 className={`h-9 rounded-lg border text-[11px] flex flex-col items-center justify-center transition-all ${bgClass} ${
                                   !day.isFuture ? "cursor-pointer hover:scale-105" : "cursor-default"
-                                } ${day.isToday ? "ring-2 ring-blue-500 ring-offset-1" : ""}`}
+                                } ${day.isToday ? "ring-2 ring-brand-500 ring-offset-1" : ""}`}
                               >
                                 <span>{day.dayNum}</span>
                                 {isSubmitted && (
@@ -1933,7 +1933,7 @@ export const LeaderChecklist: React.FC = () => {
             {settingsSubTab === "ALLOWANCE_RULES" ? (
               <div className="space-y-6 min-w-0">
                 {/* Penjelasan Sistem Batas Persenan */}
-                <div className="bg-gradient-to-r from-emerald-50 via-teal-50 to-blue-50 border border-emerald-200/80 p-4 sm:p-5 rounded-2xl">
+                <div className="bg-gradient-to-r from-emerald-50 via-teal-50 to-brand-50 border border-emerald-200/80 p-4 sm:p-5 rounded-2xl">
                   <div className="flex items-start gap-3.5">
                     <div className="p-2.5 bg-emerald-600 text-white rounded-xl shadow-xs shrink-0">
                       <ShieldCheck className="w-5 h-5" />
@@ -2028,7 +2028,7 @@ export const LeaderChecklist: React.FC = () => {
                                 isGradeA
                                   ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
                                   : isGradeB
-                                  ? "bg-blue-100 text-blue-800 border border-blue-300"
+                                  ? "bg-brand-100 text-brand-800 border border-brand-300"
                                   : isGradeC
                                   ? "bg-amber-100 text-amber-800 border border-amber-300"
                                   : "bg-rose-100 text-rose-800 border border-rose-300"
@@ -2113,7 +2113,7 @@ export const LeaderChecklist: React.FC = () => {
                               isGradeA
                                 ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
                                 : isGradeB
-                                ? "bg-blue-100 text-blue-800 border border-blue-300"
+                                ? "bg-brand-100 text-brand-800 border border-brand-300"
                                 : isGradeC
                                 ? "bg-amber-100 text-amber-800 border border-amber-300"
                                 : "bg-rose-100 text-rose-800 border border-rose-300"
@@ -2269,7 +2269,7 @@ export const LeaderChecklist: React.FC = () => {
                   >
                     {/* Category Header with Title input & Delete button */}
                     <div className="flex items-center gap-2.5">
-                      <span className="w-7 h-7 rounded-xl bg-blue-600 text-white font-black text-xs flex items-center justify-center shrink-0 shadow-2xs">
+                      <span className="w-7 h-7 rounded-xl bg-brand-600 text-white font-black text-xs flex items-center justify-center shrink-0 shadow-2xs">
                         {catIdx + 1}
                       </span>
                       <input
@@ -2296,7 +2296,7 @@ export const LeaderChecklist: React.FC = () => {
                     <div className="space-y-2 sm:pl-7">
                       <div className="flex justify-between items-center text-xs pb-0.5">
                         <p className="font-semibold text-slate-500 flex items-center gap-1.5 text-[11px] sm:text-xs">
-                          <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                          <span className="w-1.5 h-1.5 rounded-full bg-brand-500" />
                           Sub-Tugas Supervisi & Shift:
                         </p>
                         <span className="text-[11px] font-bold text-slate-400 bg-white border border-slate-200/80 px-2 py-0.5 rounded-md shadow-2xs">
@@ -2360,7 +2360,7 @@ export const LeaderChecklist: React.FC = () => {
                                         ? "bg-orange-50 border-orange-300 text-orange-900"
                                         : detail.shift === "SORE"
                                         ? "bg-purple-50 border-purple-300 text-purple-900"
-                                        : "bg-blue-50 border-blue-200 text-blue-900"
+                                        : "bg-brand-50 border-brand-200 text-brand-900"
                                     }`}
                                   />
 
@@ -2693,11 +2693,11 @@ export const LeaderChecklist: React.FC = () => {
 
       {/* Banner Khusus jika Hari Ini Libur (OFF) */}
       {userScheduledShift === "OFF" && (
-        <div className="bg-indigo-50 border border-indigo-200 p-4 rounded-2xl flex items-center gap-3">
+        <div className="bg-brand-50 border border-brand-200 p-4 rounded-2xl flex items-center gap-3">
           <span className="text-2xl">🏖️</span>
-          <div className="text-xs text-indigo-900">
+          <div className="text-xs text-brand-900">
             <p className="font-bold">Hari Ini Anda Dijadwalkan Libur (OFF)</p>
-            <p className="text-indigo-700 mt-0.5">
+            <p className="text-brand-700 mt-0.5">
               Anda tidak dibebani kewajiban checklist tugas shift hari ini, sehingga persentase KPI dan bonus Anda tetap aman terlindungi.
             </p>
           </div>
@@ -2979,9 +2979,9 @@ export const LeaderChecklist: React.FC = () => {
       </div>
 
       {/* Info Edukasi KPI & Bonus */}
-      <div className="bg-blue-50 border border-blue-200 p-4 rounded-xl flex items-start gap-3">
-        <Sparkles className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
-        <div className="text-xs text-blue-900">
+      <div className="bg-brand-50 border border-brand-200 p-4 rounded-xl flex items-start gap-3">
+        <Sparkles className="w-5 h-5 text-brand-600 shrink-0 mt-0.5" />
+        <div className="text-xs text-brand-900">
           <p className="font-bold mb-0.5">Transparansi Penilaian KPI & Bonus</p>
           <p>
             Checklist tugas yang Anda selesaikan sesuai shift otomatis dihitung ke dalam capaian KPI bulanan Anda. Semakin tinggi persentase penyelesaian tugas shift, semakin besar bonus yang Anda bawa pulang saat penggajian!

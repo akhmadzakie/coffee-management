@@ -788,7 +788,7 @@ export function ClockIn() {
                 <button
                   type="button"
                   onClick={capturePhoto}
-                  className="px-8 py-3.5 bg-gradient-to-r from-brand-600 to-indigo-600 hover:from-brand-500 hover:to-indigo-500 active:scale-95 text-white rounded-full font-black text-xs sm:text-sm shadow-md transition-all flex items-center gap-2 cursor-pointer"
+                  className="px-8 py-3.5 bg-gradient-to-r from-brand-600 to-brand-600 hover:from-brand-500 hover:to-brand-500 active:scale-95 text-white rounded-full font-black text-xs sm:text-sm shadow-md transition-all flex items-center gap-2 cursor-pointer"
                 >
                   <Camera className="w-4 h-4" />
                   <span>Ambil Foto Selfie</span>

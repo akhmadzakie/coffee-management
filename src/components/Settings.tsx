@@ -216,8 +216,8 @@ export const SettingsComponent = () => {
             </span>
           )}
           {isManager && (
-            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-800 text-xs font-bold shadow-2xs">
-              <Store className="w-3.5 h-3.5 text-indigo-600" />
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-brand-50 border border-brand-200 text-brand-800 text-xs font-bold shadow-2xs">
+              <Store className="w-3.5 h-3.5 text-brand-600" />
               <span>Manager Operasional (Toko & Pajak)</span>
             </span>
           )}
@@ -887,23 +887,23 @@ export const SettingsComponent = () => {
                 target="_blank"
                 rel="noreferrer"
                 download="Panduan_Operasional_Kasir_dan_KDS.pdf"
-                className="group flex flex-col justify-between p-3.5 bg-gradient-to-br from-blue-900 to-indigo-950 text-white rounded-xl hover:from-blue-800 hover:to-indigo-900 transition-all shadow-xs border border-blue-800"
+                className="group flex flex-col justify-between p-3.5 bg-gradient-to-br from-brand-900 to-brand-950 text-white rounded-xl hover:from-brand-800 hover:to-brand-900 transition-all shadow-xs border border-brand-800"
               >
                 <div>
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-blue-500 text-white">
+                    <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-brand-500 text-white">
                       Front & Back Office
                     </span>
-                    <Download className="w-4 h-4 text-blue-300 group-hover:translate-y-0.5 transition-transform" />
+                    <Download className="w-4 h-4 text-brand-300 group-hover:translate-y-0.5 transition-transform" />
                   </div>
                   <h4 className="text-xs font-bold text-white mb-1">
                     Panduan Kasir & KDS Dapur
                   </h4>
-                  <p className="text-[11px] text-blue-100">
+                  <p className="text-[11px] text-brand-100">
                     SOP Buka Shift, Transaksi Meja, Split Bill, Tiket Layar Barista/Dapur, Kalibrasi, hingga Z-Report.
                   </p>
                 </div>
-                <div className="mt-3 text-[10px] text-blue-300 font-semibold flex items-center gap-1">
+                <div className="mt-3 text-[10px] text-brand-300 font-semibold flex items-center gap-1">
                   <FileText className="w-3.5 h-3.5" /> Unduh PDF Kasir & KDS (3 Hal)
                 </div>
               </a>

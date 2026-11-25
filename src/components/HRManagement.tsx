@@ -1728,41 +1728,41 @@ export function HRManagement() {
 
                 <motion.div
                   whileHover={{ y: -4 }}
-                  className="bg-gradient-to-br from-indigo-50 to-white p-6 rounded-2xl border border-indigo-100 shadow-sm"
+                  className="bg-gradient-to-br from-brand-50 to-white p-6 rounded-2xl border border-brand-100 shadow-sm"
                 >
                   <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-indigo-900 text-sm font-semibold">
+                    <h3 className="text-brand-900 text-sm font-semibold">
                       {isIndo ? "Total Gaji Pokok" : "Total Basic Salary"}
                     </h3>
-                    <div className="p-2.5 bg-indigo-100 text-indigo-600 rounded-xl">
+                    <div className="p-2.5 bg-brand-100 text-brand-600 rounded-xl">
                       <FileText className="w-5 h-5" />
                     </div>
                   </div>
-                  <p className="text-2xl font-bold text-indigo-900">
+                  <p className="text-2xl font-bold text-brand-900">
                     {formatRupiah(
                       contracts
                         .filter((c) => c.status === "ACTIVE" || (c as any).isActive)
                         .reduce((sum, c) => sum + (c.basicSalary || 0), 0),
                     )}
                   </p>
-                  <p className="text-sm text-indigo-600 mt-2">
+                  <p className="text-sm text-brand-600 mt-2">
                     {isIndo ? "Kontrak Aktif" : "Active Contracts"}
                   </p>
                 </motion.div>
 
                 <motion.div
                   whileHover={{ y: -4 }}
-                  className="bg-gradient-to-br from-blue-50 to-white p-6 rounded-2xl border border-blue-100 shadow-sm"
+                  className="bg-gradient-to-br from-brand-50 to-white p-6 rounded-2xl border border-brand-100 shadow-sm"
                 >
                   <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-blue-900 text-sm font-semibold">
+                    <h3 className="text-brand-900 text-sm font-semibold">
                       {isIndo ? "Proyeksi Payroll" : "Payroll Projection"}
                     </h3>
-                    <div className="p-2.5 bg-blue-100 text-blue-600 rounded-xl">
+                    <div className="p-2.5 bg-brand-100 text-brand-600 rounded-xl">
                       <RupiahSign className="w-5 h-5" />
                     </div>
                   </div>
-                  <p className="text-2xl font-bold text-blue-900 tabular-nums">
+                  <p className="text-2xl font-bold text-brand-900 tabular-nums">
                     {formatRupiah(
                       (() => {
                         const existingPeriodSlips = (payrollRecords || []).filter((p: any) => p.period === currentPeriod);
@@ -1777,7 +1777,7 @@ export function HRManagement() {
                       })()
                     )}
                   </p>
-                  <p className="text-sm text-blue-600 mt-2">
+                  <p className="text-sm text-brand-600 mt-2">
                     {isIndo ? "Periode Berjalan" : "Current Period"}
                   </p>
                 </motion.div>
@@ -1811,7 +1811,7 @@ export function HRManagement() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                   {[
                     { key: "PAGI", label: "Shift Pagi", time: "07:00 – 15:00", bg: "bg-emerald-50/50 border-emerald-200/70", badge: "bg-emerald-100 text-emerald-800" },
-                    { key: "MIDDLE", label: "Shift Middle", time: "11:00 – 19:00", bg: "bg-blue-50/50 border-blue-200/70", badge: "bg-blue-100 text-blue-800" },
+                    { key: "MIDDLE", label: "Shift Middle", time: "11:00 – 19:00", bg: "bg-brand-50/50 border-brand-200/70", badge: "bg-brand-100 text-brand-800" },
                     { key: "SORE", label: "Shift Sore", time: "15:00 – 23:00", bg: "bg-amber-50/50 border-amber-200/70", badge: "bg-amber-100 text-amber-800" },
                     { key: "OFF", label: "Libur (OFF)", time: "Jadwal Istirahat", bg: "bg-slate-50/70 border-slate-200/70", badge: "bg-slate-200 text-slate-700" },
                   ].map((group) => {
@@ -2162,7 +2162,7 @@ export function HRManagement() {
               {/* Callout Pemantauan Kehadiran */}
               <div className="mt-8 p-4 bg-slate-50 border border-slate-200/80 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
-                  <div className="p-2.5 bg-blue-100 text-blue-700 rounded-xl shrink-0">
+                  <div className="p-2.5 bg-brand-100 text-brand-700 rounded-xl shrink-0">
                     <MapPin className="w-5 h-5" />
                   </div>
                   <div>
@@ -2177,7 +2177,7 @@ export function HRManagement() {
                 <button
                   type="button"
                   onClick={() => setActiveTab("attendance")}
-                  className="px-4 py-2 bg-white border border-slate-300 hover:border-blue-500 hover:text-blue-600 rounded-lg text-xs font-bold text-slate-700 shadow-2xs transition-colors shrink-0 flex items-center justify-center gap-1.5"
+                  className="px-4 py-2 bg-white border border-slate-300 hover:border-brand-500 hover:text-brand-600 rounded-lg text-xs font-bold text-slate-700 shadow-2xs transition-colors shrink-0 flex items-center justify-center gap-1.5"
                 >
                   Buka Tab Absensi →
                 </button>
@@ -2562,10 +2562,10 @@ export function HRManagement() {
                             type="button"
                             onClick={handleOpenApproveModal}
                             disabled={isReadOnly}
-                            className="px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 transition-colors shadow-2xs"
+                            className="px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 bg-brand-50 hover:bg-brand-100 text-brand-700 border border-brand-200 transition-colors shadow-2xs"
                             title="Edit arahan brief yang tampil di Dashboard Karyawan"
                           >
-                            <Megaphone className="w-3.5 h-3.5 text-blue-600" />
+                            <Megaphone className="w-3.5 h-3.5 text-brand-600" />
                             <span>Edit Brief Mingguan</span>
                           </button>
                         )}
@@ -2664,7 +2664,7 @@ export function HRManagement() {
 
               {/* Scope Notice */}
               <div className="flex items-center gap-2 text-xs text-slate-600 bg-slate-50 border border-slate-200/80 rounded-xl px-3.5 py-2.5">
-                <Info className="w-4 h-4 text-indigo-500 shrink-0" />
+                <Info className="w-4 h-4 text-brand-500 shrink-0" />
                 <span>
                   Jadwal shift mingguan berlaku untuk tim operasional (<strong>Bar, Kasir, Kitchen, Baker</strong>). Staf manajemen dan kantor (Manager, Finance, HRD, Admin) bertugas dengan jam kantor reguler.
                 </span>
@@ -2716,12 +2716,12 @@ export function HRManagement() {
                       def.color === "emerald"
                         ? "bg-emerald-500"
                         : def.color === "blue"
-                        ? "bg-blue-500"
+                        ? "bg-brand-500"
                         : def.color === "amber"
                         ? "bg-amber-500"
                         : def.color === "purple"
                         ? "bg-purple-500"
-                        : "bg-indigo-500";
+                        : "bg-brand-500";
                     return (
                       <span key={def.id} className="flex items-center gap-1.5">
                         <span className={`w-2.5 h-2.5 rounded-full ${dotClass} inline-block`} />
@@ -2795,13 +2795,13 @@ export function HRManagement() {
                                       if (activeDef.color === "emerald" || shift === "PAGI") {
                                         badgeColor = "bg-emerald-50 text-emerald-800 border-emerald-300";
                                       } else if (activeDef.color === "blue" || shift === "MIDDLE") {
-                                        badgeColor = "bg-blue-50 text-blue-800 border-blue-300";
+                                        badgeColor = "bg-brand-50 text-brand-800 border-brand-300";
                                       } else if (activeDef.color === "amber" || shift === "SORE") {
                                         badgeColor = "bg-amber-50 text-amber-800 border-amber-300";
                                       } else if (activeDef.color === "purple") {
                                         badgeColor = "bg-purple-50 text-purple-800 border-purple-300";
                                       } else {
-                                        badgeColor = "bg-indigo-50 text-indigo-800 border-indigo-300";
+                                        badgeColor = "bg-brand-50 text-brand-800 border-brand-300";
                                       }
                                     }
                                     return (
@@ -3040,7 +3040,7 @@ export function HRManagement() {
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
                   <div>
                     <div className="flex items-center gap-2">
-                      <div className="p-2 bg-blue-50 text-blue-600 rounded-xl">
+                      <div className="p-2 bg-brand-50 text-brand-600 rounded-xl">
                         <MapPin className="w-5 h-5" />
                       </div>
                       <h3 className="text-xl font-bold text-slate-800 tracking-tight">
@@ -3111,9 +3111,9 @@ export function HRManagement() {
 
                 {/* Bulk Actions Bar if items selected */}
                 {selectedAttIds.length > 0 && canEditHR && (
-                  <div className="mb-4 bg-indigo-50 border border-indigo-200 rounded-xl p-3 flex flex-wrap items-center justify-between gap-3 text-xs">
-                    <span className="font-semibold text-indigo-900 flex items-center gap-2">
-                      <CheckSquare className="w-4 h-4 text-indigo-600" />
+                  <div className="mb-4 bg-brand-50 border border-brand-200 rounded-xl p-3 flex flex-wrap items-center justify-between gap-3 text-xs">
+                    <span className="font-semibold text-brand-900 flex items-center gap-2">
+                      <CheckSquare className="w-4 h-4 text-brand-600" />
                       <strong>{selectedAttIds.length}</strong> catatan kehadiran dipilih
                     </span>
                     <div className="flex items-center gap-2">
@@ -3142,7 +3142,7 @@ export function HRManagement() {
                           <th className="py-3 px-3 text-center w-10">
                             <input
                               type="checkbox"
-                              className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                              className="rounded border-slate-300 text-brand-600 focus:ring-brand-500 cursor-pointer"
                               title="Pilih Semua yang Ditampilkan"
                               onChange={(e) => {
                                 if (e.target.checked) {
@@ -3212,12 +3212,12 @@ export function HRManagement() {
                           const currentApproval = d.approvalStatus || "PENDING";
 
                           return (
-                            <tr key={d.id} className={`border-b border-slate-100 hover:bg-slate-50/80 transition-colors text-xs ${isSelected ? "bg-indigo-50/40" : ""}`}>
+                            <tr key={d.id} className={`border-b border-slate-100 hover:bg-slate-50/80 transition-colors text-xs ${isSelected ? "bg-brand-50/40" : ""}`}>
                               {canEditHR && (
                                 <td className="py-3 px-3 text-center">
                                   <input
                                     type="checkbox"
-                                    className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                                    className="rounded border-slate-300 text-brand-600 focus:ring-brand-500 cursor-pointer"
                                     checked={isSelected}
                                     onChange={(e) => {
                                       if (e.target.checked) {
@@ -3234,7 +3234,7 @@ export function HRManagement() {
                               </td>
                               <td className="py-3 px-4 whitespace-nowrap">
                                 <div className="flex items-center gap-2">
-                                  <div className="w-7 h-7 rounded-full bg-blue-100 text-blue-700 font-bold flex items-center justify-center text-xs shrink-0">
+                                  <div className="w-7 h-7 rounded-full bg-brand-100 text-brand-700 font-bold flex items-center justify-center text-xs shrink-0">
                                     {emp?.name ? emp.name.charAt(0).toUpperCase() : "U"}
                                   </div>
                                   <div>
@@ -3252,7 +3252,7 @@ export function HRManagement() {
                                   <span className={`px-2.5 py-0.5 text-[11px] font-bold rounded-md ${
                                     d.status === "HADIR" ? "bg-emerald-100 text-emerald-800" :
                                     d.status === "TERLAMBAT" ? "bg-amber-100 text-amber-800" :
-                                    d.status === "IZIN" ? "bg-blue-100 text-blue-800" :
+                                    d.status === "IZIN" ? "bg-brand-100 text-brand-800" :
                                     d.status === "SAKIT" ? "bg-rose-100 text-rose-800" :
                                     "bg-slate-200 text-slate-700"
                                   }`}>
@@ -3278,10 +3278,10 @@ export function HRManagement() {
                                   )}
                                   {d.isCorrected && (
                                     <span
-                                      className="inline-flex items-center gap-1 text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-full"
+                                      className="inline-flex items-center gap-1 text-[10px] font-bold text-brand-700 bg-brand-50 border border-brand-200 px-2 py-0.5 rounded-full"
                                       title={d.correctionReason ? `Alasan: ${d.correctionReason} (oleh ${d.correctedBy || "Manager"})` : "Telah dikoreksi Manager"}
                                     >
-                                      <Sparkles className="w-3 h-3 text-indigo-600" /> Dikoreksi ({d.correctedBy || "Manager"})
+                                      <Sparkles className="w-3 h-3 text-brand-600" /> Dikoreksi ({d.correctedBy || "Manager"})
                                     </span>
                                   )}
                                 </div>
@@ -3508,7 +3508,7 @@ export function HRManagement() {
             {/* Header */}
             <div className="px-5 py-3 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
               <h3 className="font-bold text-base text-slate-900 flex items-center">
-                <Users className="w-5 h-5 mr-2 text-indigo-600" />
+                <Users className="w-5 h-5 mr-2 text-brand-600" />
                 {editingEmployee ? (isIndo ? "Edit Karyawan" : "Edit Employee") : (isIndo ? "Tambah Karyawan" : "Add Employee")}
               </h3>
               <button 
@@ -3529,7 +3529,7 @@ export function HRManagement() {
                   onClick={() => setEmpModalTab("basic")}
                   className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${
                     empModalTab === "basic"
-                      ? "bg-white text-indigo-700 shadow-xs"
+                      ? "bg-white text-brand-700 shadow-xs"
                       : "text-slate-500 hover:text-slate-700"
                   }`}
                 >
@@ -3540,7 +3540,7 @@ export function HRManagement() {
                   onClick={() => setEmpModalTab("contact")}
                   className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${
                     empModalTab === "contact"
-                      ? "bg-white text-indigo-700 shadow-xs"
+                      ? "bg-white text-brand-700 shadow-xs"
                       : "text-slate-500 hover:text-slate-700"
                   }`}
                 >
@@ -3561,7 +3561,7 @@ export function HRManagement() {
                       <input 
                         type="text" 
                         required
-                        className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none text-sm transition-all" 
+                        className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 focus:bg-white outline-none text-sm transition-all" 
                         value={empForm.name} 
                         onChange={e => setEmpForm({...empForm, name: e.target.value})} 
                         placeholder="Contoh: Budi"
@@ -3574,7 +3574,7 @@ export function HRManagement() {
                       <input 
                         type="text" 
                         required
-                        className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none text-sm transition-all" 
+                        className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 focus:bg-white outline-none text-sm transition-all" 
                         value={empForm.username} 
                         onChange={e => setEmpForm({...empForm, username: e.target.value})} 
                         placeholder="Contoh: budi"
@@ -3656,19 +3656,19 @@ export function HRManagement() {
                   </div>
 
                   {!editingEmployee && (
-                    <div className="p-2.5 bg-indigo-50/70 rounded-xl border border-indigo-100">
+                    <div className="p-2.5 bg-brand-50/70 rounded-xl border border-brand-100">
                       <label className="flex items-center gap-2 cursor-pointer">
                         <input 
                           type="checkbox" 
                           checked={autoCreateUser}
                           onChange={(e) => setAutoCreateUser(e.target.checked)}
-                          className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500"
+                          className="w-4 h-4 text-brand-600 rounded border-slate-300 focus:ring-brand-500"
                         />
-                        <span className="text-xs font-bold text-indigo-950">Buat Akun Login Otomatis</span>
+                        <span className="text-xs font-bold text-brand-950">Buat Akun Login Otomatis</span>
                       </label>
                       {autoCreateUser && (
-                        <p className="text-[11px] text-indigo-700 mt-1 ml-6 leading-relaxed">
-                          Username: <strong className="font-semibold text-indigo-900">{empForm.username || "[Username]"}</strong>, PIN default: <strong className="font-semibold text-indigo-900">123456</strong>
+                        <p className="text-[11px] text-brand-700 mt-1 ml-6 leading-relaxed">
+                          Username: <strong className="font-semibold text-brand-900">{empForm.username || "[Username]"}</strong>, PIN default: <strong className="font-semibold text-brand-900">123456</strong>
                         </p>
                       )}
                     </div>
@@ -3681,7 +3681,7 @@ export function HRManagement() {
                       <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">No. HP / WhatsApp</label>
                       <input 
                         type="text" 
-                        className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none text-sm transition-all" 
+                        className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 focus:bg-white outline-none text-sm transition-all" 
                         value={empForm.phone} 
                         onChange={e => setEmpForm({...empForm, phone: e.target.value})} 
                         placeholder="08123456789" 
@@ -3691,7 +3691,7 @@ export function HRManagement() {
                       <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">Email</label>
                       <input 
                         type="email" 
-                        className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none text-sm transition-all" 
+                        className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 focus:bg-white outline-none text-sm transition-all" 
                         value={empForm.email} 
                         onChange={e => setEmpForm({...empForm, email: e.target.value})} 
                         placeholder="email@contoh.com" 
@@ -3702,7 +3702,7 @@ export function HRManagement() {
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">Alamat Domisili</label>
                     <textarea 
-                      className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none text-sm resize-none h-20 transition-all" 
+                      className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 focus:bg-white outline-none text-sm resize-none h-20 transition-all" 
                       value={empForm.address} 
                       onChange={e => setEmpForm({...empForm, address: e.target.value})} 
                       placeholder="Alamat domisili lengkap..." 
@@ -3869,7 +3869,7 @@ export function HRManagement() {
             {/* Header */}
             <div className="p-4 sm:px-6 sm:py-4 border-b border-slate-100 flex justify-between items-start sm:items-center bg-slate-50/80 z-10 shrink-0 gap-3">
               <div className="flex items-center gap-3 min-w-0 flex-1">
-                <div className="w-10 h-10 rounded-xl bg-blue-600 text-white font-bold flex items-center justify-center text-sm shadow-sm shrink-0">
+                <div className="w-10 h-10 rounded-xl bg-brand-600 text-white font-bold flex items-center justify-center text-sm shadow-sm shrink-0">
                   {emp?.name ? emp.name.charAt(0).toUpperCase() : "U"}
                 </div>
                 <div className="min-w-0 flex-1">
@@ -3912,11 +3912,11 @@ export function HRManagement() {
             {/* Content Body */}
             <div className="p-6 overflow-y-auto custom-scrollbar space-y-6 flex-1 bg-slate-50/30">
               {/* Petunjuk Untuk Manager */}
-              <div className="p-3.5 bg-blue-50/80 border border-blue-200/70 rounded-xl flex items-start gap-3 text-xs text-blue-900">
-                <MapPin className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+              <div className="p-3.5 bg-brand-50/80 border border-brand-200/70 rounded-xl flex items-start gap-3 text-xs text-brand-900">
+                <MapPin className="w-4 h-4 text-brand-600 shrink-0 mt-0.5" />
                 <div>
                   <p className="font-semibold">Validasi Kehadiran Fisik Lapangan</p>
-                  <p className="text-blue-700/90 mt-0.5">
+                  <p className="text-brand-700/90 mt-0.5">
                     Pastikan foto selfie diambil langsung di lokasi outlet coffee shop dan titik lokasi GPS peta sesuai dengan area operasional sebelum melakukan persetujuan.
                   </p>
                 </div>
@@ -3957,7 +3957,7 @@ export function HRManagement() {
                               title: `Foto Selfie Masuk - ${emp?.name || getEmployeeName(verifyingAttendance.employeeId)}`,
                               subtitle: `${verifyingAttendance.date} • Pukul ${verifyingAttendance.clockInTime ? formatWitaTimeHm(verifyingAttendance.clockInTime, DEFAULT_STORE_TIMEZONE) : '-'} WITA`
                             })}
-                            className="text-[11px] font-bold text-blue-600 hover:text-blue-700 hover:underline flex items-center gap-1 cursor-pointer"
+                            className="text-[11px] font-bold text-brand-600 hover:text-brand-700 hover:underline flex items-center gap-1 cursor-pointer"
                           >
                             <Eye className="w-3.5 h-3.5" />
                             <span>Buka Foto Penuh ↗</span>
@@ -4003,7 +4003,7 @@ export function HRManagement() {
                             href={`https://maps.google.com/?q=${verifyingAttendance.clockInLocation.lat},${verifyingAttendance.clockInLocation.lng}`} 
                             target="_blank" 
                             rel="noreferrer" 
-                            className="text-[11px] font-bold text-blue-600 hover:text-blue-700 hover:underline"
+                            className="text-[11px] font-bold text-brand-600 hover:text-brand-700 hover:underline"
                           >
                             Buka Google Maps ↗
                           </a>
@@ -4067,7 +4067,7 @@ export function HRManagement() {
                               title: `Foto Selfie Pulang - ${emp?.name || getEmployeeName(verifyingAttendance.employeeId)}`,
                               subtitle: `${verifyingAttendance.date} • Pukul ${verifyingAttendance.clockOutTime ? formatWitaTimeHm(verifyingAttendance.clockOutTime, DEFAULT_STORE_TIMEZONE) : '-'} WITA`
                             })}
-                            className="text-[11px] font-bold text-blue-600 hover:text-blue-700 hover:underline flex items-center gap-1 cursor-pointer"
+                            className="text-[11px] font-bold text-brand-600 hover:text-brand-700 hover:underline flex items-center gap-1 cursor-pointer"
                           >
                             <Eye className="w-3.5 h-3.5" />
                             <span>Buka Foto Penuh ↗</span>
@@ -4113,7 +4113,7 @@ export function HRManagement() {
                             href={`https://maps.google.com/?q=${verifyingAttendance.clockOutLocation.lat},${verifyingAttendance.clockOutLocation.lng}`} 
                             target="_blank" 
                             rel="noreferrer" 
-                            className="text-[11px] font-bold text-blue-600 hover:text-blue-700 hover:underline"
+                            className="text-[11px] font-bold text-brand-600 hover:text-brand-700 hover:underline"
                           >
                             Buka Google Maps ↗
                           </a>
@@ -4311,7 +4311,7 @@ export function HRManagement() {
             </div>
             <div className="px-6 py-4 bg-slate-50 flex justify-end gap-3 border-t border-slate-100 shrink-0">
               <button onClick={() => setIsAttendanceModalOpen(false)} className="px-4 py-2 text-slate-600 font-medium hover:bg-slate-200 rounded-lg">Batal</button>
-              <button onClick={handleSaveAttendance} className="px-4 py-2 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700">Simpan</button>
+              <button onClick={handleSaveAttendance} className="px-4 py-2 bg-brand-600 text-white font-medium rounded-lg hover:bg-brand-700">Simpan</button>
             </div>
                 </motion.div>
               </motion.div>
@@ -4350,7 +4350,7 @@ export function HRManagement() {
                 </div>
                 <div>
                   <h3 className="text-lg font-black tracking-tight">Pengaturan Master Shift & Jam Operasional</h3>
-                  <p className="text-xs text-blue-100 mt-0.5">
+                  <p className="text-xs text-brand-100 mt-0.5">
                     Sesuaikan jam mulai/selesai, toleransi keterlambatan, dan buat shift baru untuk kedai kopi Anda.
                   </p>
                 </div>
@@ -4367,17 +4367,17 @@ export function HRManagement() {
             {/* Body */}
             <form onSubmit={handleSaveShiftDefinitions} className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-6">
               {/* Guidance Info Banner */}
-              <div className="bg-indigo-50/70 border border-indigo-100 rounded-2xl p-4 text-xs text-indigo-950 flex items-start gap-3">
-                <Info className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
+              <div className="bg-brand-50/70 border border-brand-100 rounded-2xl p-4 text-xs text-brand-950 flex items-start gap-3">
+                <Info className="w-4 h-4 text-brand-600 shrink-0 mt-0.5" />
                 <div className="space-y-1">
-                  <p className="font-semibold text-indigo-900">Petunjuk Konfigurasi Shift & Jam Kerja:</p>
-                  <p className="leading-relaxed text-indigo-800">
+                  <p className="font-semibold text-brand-900">Petunjuk Konfigurasi Shift & Jam Kerja:</p>
+                  <p className="leading-relaxed text-brand-800">
                     • <strong>Jam Mulai & Selesai:</strong> Digunakan untuk acuan absensi (Clock-in/out) dan jadwal kerja tim operasional.
                   </p>
-                  <p className="leading-relaxed text-indigo-800">
+                  <p className="leading-relaxed text-brand-800">
                     • <strong>Toleransi Keterlambatan:</strong> Waktu toleransi (menit). Jika toleransi 15 menit pada shift 07:00, maka kehadiran di atas 07:15 akan otomatis ditandai terlambat.
                   </p>
-                  <p className="leading-relaxed text-indigo-800">
+                  <p className="leading-relaxed text-brand-800">
                     • <strong>Jam Kerja Flat (8 Jam):</strong> Standar kerja harian tanpa hitung lembur otomatis. Lembur diinput manual di slip gaji jika disetujui Manajer.
                   </p>
                 </div>
@@ -4401,7 +4401,7 @@ export function HRManagement() {
                     <button
                       type="button"
                       onClick={handleAddCustomShift}
-                      className="text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white transition-colors flex items-center gap-1.5 px-3 py-1.5 rounded-xl shadow-xs"
+                      className="text-xs font-bold bg-brand-600 hover:bg-brand-700 text-white transition-colors flex items-center gap-1.5 px-3 py-1.5 rounded-xl shadow-xs"
                     >
                       <Plus className="w-3.5 h-3.5" />
                       <span>Tambah Shift</span>
@@ -4417,7 +4417,7 @@ export function HRManagement() {
                         key={s.id}
                         className={`p-4 rounded-2xl border transition-all ${
                           s.isActive !== false
-                            ? "bg-white border-slate-200 shadow-2xs hover:border-indigo-300"
+                            ? "bg-white border-slate-200 shadow-2xs hover:border-brand-300"
                             : "bg-slate-50/70 border-slate-200 opacity-60"
                         }`}
                       >
@@ -4428,7 +4428,7 @@ export function HRManagement() {
                                 type="checkbox"
                                 checked={s.isActive !== false}
                                 onChange={(e) => updateShiftField(idx, "isActive", e.target.checked)}
-                                className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500"
+                                className="w-4 h-4 rounded text-brand-600 focus:ring-brand-500"
                               />
                               <span className="text-xs font-bold text-slate-700">
                                 {s.isActive !== false ? "Aktif di Jadwal" : "Dinonaktifkan"}
@@ -4477,7 +4477,7 @@ export function HRManagement() {
                               value={s.name}
                               onChange={(e) => updateShiftField(idx, "name", e.target.value)}
                               required
-                              className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 font-semibold text-slate-800"
+                              className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 font-semibold text-slate-800"
                               placeholder="cth: Shift Pagi"
                             />
                           </div>
@@ -4491,7 +4491,7 @@ export function HRManagement() {
                               value={s.startTime}
                               onChange={(e) => updateShiftField(idx, "startTime", e.target.value)}
                               required
-                              className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 font-semibold text-slate-800"
+                              className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 font-semibold text-slate-800"
                             />
                           </div>
 
@@ -4504,7 +4504,7 @@ export function HRManagement() {
                               value={s.endTime}
                               onChange={(e) => updateShiftField(idx, "endTime", e.target.value)}
                               required
-                              className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 font-semibold text-slate-800"
+                              className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 font-semibold text-slate-800"
                             />
                           </div>
 
@@ -4519,7 +4519,7 @@ export function HRManagement() {
                               value={s.lateToleranceMinutes ?? 15}
                               onChange={(e) => updateShiftField(idx, "lateToleranceMinutes", Math.max(0, parseInt(e.target.value) || 0))}
                               required
-                              className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 font-semibold text-slate-800"
+                              className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 font-semibold text-slate-800"
                             />
                           </div>
                         </div>

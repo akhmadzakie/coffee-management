@@ -456,7 +456,7 @@ export const PosTodayOrdersModal: React.FC<PosTodayOrdersModalProps> = ({ onClos
                           {ord.tableNumber || "Meja -"} • {ord.customerName || "Tamu"}
                         </span>
                         {ord.paymentMethod && (
-                          <span className="text-[10px] px-2 py-0.5 rounded bg-blue-50 text-blue-700 font-semibold border border-blue-200">
+                          <span className="text-[10px] px-2 py-0.5 rounded bg-brand-50 text-brand-700 font-semibold border border-brand-200">
                             {ord.paymentMethod}
                           </span>
                         )}
@@ -608,7 +608,7 @@ export const PosTodayOrdersModal: React.FC<PosTodayOrdersModalProps> = ({ onClos
               <div className="p-6 text-center space-y-4">
                 <div className="relative w-20 h-20 mx-auto flex items-center justify-center">
                   <div className="absolute inset-0 rounded-full bg-violet-400/20 animate-ping" />
-                  <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-violet-600 to-indigo-600 text-white flex items-center justify-center shadow-lg shadow-violet-500/30">
+                  <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-violet-600 to-brand-600 text-white flex items-center justify-center shadow-lg shadow-violet-500/30">
                     <Radio className="w-8 h-8 animate-pulse" />
                   </div>
                 </div>
@@ -917,7 +917,7 @@ export const PosTodayOrdersModal: React.FC<PosTodayOrdersModalProps> = ({ onClos
                       type="button"
                       onClick={handleRequestRemoteApproval}
                       disabled={isRequestingRemote}
-                      className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-md shadow-indigo-600/20 transition cursor-pointer active:scale-95 disabled:opacity-50"
+                      className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-brand-600 hover:from-violet-700 hover:to-brand-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-md shadow-brand-600/20 transition cursor-pointer active:scale-95 disabled:opacity-50"
                       title="Kirim notifikasi persetujuan langsung ke HP atau laptop Manager"
                     >
                       <Smartphone className="w-4 h-4" />

@@ -546,12 +546,12 @@ export const Layout: React.FC<LayoutProps> = ({
         );
         const dept = (currentUser?.department || emp?.department || emp?.position || "").toUpperCase();
         if (dept.includes("KITCHEN")) {
-          return { label: "Leader Kitchen", bg: "bg-indigo-50 text-indigo-700 border-indigo-200", icon: "🍳" };
+          return { label: "Leader Kitchen", bg: "bg-brand-50 text-brand-700 border-brand-200", icon: "🍳" };
         }
         if (dept.includes("BAKER") || dept.includes("PASTRY")) {
           return { label: "Leader Baker", bg: "bg-purple-50 text-purple-700 border-purple-200", icon: "🥐" };
         }
-        return { label: "Leader Bar", bg: "bg-indigo-50 text-indigo-700 border-indigo-200", icon: "☕" };
+        return { label: "Leader Bar", bg: "bg-brand-50 text-brand-700 border-brand-200", icon: "☕" };
       }
       default:
         return { label: role || "Staff", bg: "bg-slate-50 text-slate-700 border-slate-200", icon: "👤" };

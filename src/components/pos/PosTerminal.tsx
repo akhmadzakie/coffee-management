@@ -1723,7 +1723,7 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
                                 <span
                                   className={`inline-block px-2.5 py-1 rounded-full text-xs font-extrabold ${promo.type === "PERCENT"
                                       ? "bg-purple-100 text-purple-800"
-                                      : "bg-blue-100 text-blue-800"
+                                      : "bg-brand-100 text-brand-800"
                                     }`}
                                 >
                                   {promo.type === "PERCENT" ? `${promo.value}% OFF` : `-Rp ${promo.value.toLocaleString("id-ID")}`}

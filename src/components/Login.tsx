@@ -197,9 +197,9 @@ export const Login = () => {
       case "OWNER":
         return { label: "Owner (Investor)", color: "text-amber-800 bg-amber-50 border-amber-200" };
       case "MANAGER":
-        return { label: "Manager", color: "text-indigo-800 bg-indigo-50 border-indigo-200" };
+        return { label: "Manager", color: "text-brand-800 bg-brand-50 border-brand-200" };
       case "FINANCE":
-        return { label: "Finance", color: "text-blue-800 bg-blue-50 border-blue-200" };
+        return { label: "Finance", color: "text-brand-800 bg-brand-50 border-brand-200" };
       case "KASIR":
         return { label: "Kasir", color: "text-emerald-800 bg-emerald-50 border-emerald-200" };
       case "LEADER":
@@ -636,7 +636,7 @@ export const Login = () => {
                   setPin("123456");
                   setError("");
                 }}
-                className="px-3 py-1 rounded-lg bg-slate-50 dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-500/15 hover:text-indigo-800 dark:hover:text-indigo-200 border border-slate-200 dark:border-slate-700 text-xs transition-colors font-medium cursor-pointer"
+                className="px-3 py-1 rounded-lg bg-slate-50 dark:bg-slate-800 hover:bg-brand-50 dark:hover:bg-brand-500/15 hover:text-brand-800 dark:hover:text-brand-200 border border-slate-200 dark:border-slate-700 text-xs transition-colors font-medium cursor-pointer"
               >
                 💼 Manager (Operasional): <span className="font-mono text-slate-800 dark:text-slate-200">manager / 123456</span>
               </button>
