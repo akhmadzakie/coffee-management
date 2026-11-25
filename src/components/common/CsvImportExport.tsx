@@ -1,4 +1,5 @@
-import React, { useRef, useState, useEffect } from "react";
+import React, { useRef, useState, useEffect, useLayoutEffect, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { Upload, Download, FileSpreadsheet, ChevronDown, Database, Loader2 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { toast } from "../../context/ToastContext";
@@ -28,6 +29,14 @@ interface CsvImportExportProps {
   templateInstructions?: string[];
 }
 
+interface DropdownMenuCoords {
+  top?: number;
+  bottom?: number;
+  left: number;
+  width: number;
+  placement: "bottom" | "top";
+}
+
 export const CsvImportExport: React.FC<CsvImportExportProps> = ({
   onImport,
   templateHeaders,
@@ -41,45 +50,85 @@ export const CsvImportExport: React.FC<CsvImportExportProps> = ({
   templateInstructions = [],
 }) => {
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const [isOpen, setIsOpen] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [menuCoords, setMenuCoords] = useState<DropdownMenuCoords | null>(null);
 
-  const [dropdownPos, setDropdownPos] = useState<{
-    align: "left" | "right" | "custom";
-    customLeft?: number;
-    width: number;
-  }>({ align: "left", width: 288 });
+  const updateMenuPosition = useCallback(() => {
+    if (!dropdownRef.current || typeof window === "undefined") return;
+    const rect = dropdownRef.current.getBoundingClientRect();
+    const viewportW = window.innerWidth;
+    const viewportH = window.innerHeight;
+    const margin = 12;
+    const gap = 8;
 
-  useEffect(() => {
-    if (isOpen && dropdownRef.current) {
-      const rect = dropdownRef.current.getBoundingClientRect();
-      const screenW = window.innerWidth;
-      const idealWidth = Math.min(288, screenW - 24);
-
-      if (rect.left + idealWidth <= screenW - 12) {
-        // Fits comfortably to the left
-        setDropdownPos({ align: "left", width: idealWidth });
-      } else if (rect.right - idealWidth >= 12) {
-        // Fits comfortably to the right
-        setDropdownPos({ align: "right", width: idealWidth });
-      } else {
-        // Clamps cleanly relative to button so dropdown stays at least 12px from left screen edge
-        const customLeft = 12 - rect.left;
-        setDropdownPos({ align: "custom", customLeft, width: idealWidth });
-      }
+    const width = Math.min(288, Math.max(200, viewportW - margin * 2));
+    // Default align left of button; fallback to right if overflowing right edge, then clamp strictly inside viewport
+    let left = rect.left;
+    if (left + width > viewportW - margin) {
+      left = rect.right - width;
     }
-  }, [isOpen]);
+    left = Math.max(margin, Math.min(left, viewportW - width - margin));
+
+    const estHeight = currentData ? 168 : 116;
+    const spaceBelow = Math.max(0, viewportH - rect.bottom - gap - margin);
+    const spaceAbove = Math.max(0, rect.top - gap - margin);
+    const openUpward = spaceBelow < estHeight && spaceAbove > spaceBelow;
+
+    if (openUpward) {
+      setMenuCoords({
+        bottom: Math.max(margin, viewportH - rect.top + gap),
+        left,
+        width,
+        placement: "top",
+      });
+    } else {
+      setMenuCoords({
+        top: Math.max(margin, rect.bottom + gap),
+        left,
+        width,
+        placement: "bottom",
+      });
+    }
+  }, [currentData]);
+
+  useLayoutEffect(() => {
+    if (!isOpen) return;
+    updateMenuPosition();
+  }, [isOpen, updateMenuPosition]);
 
   useEffect(() => {
+    if (!isOpen) return;
+    const handleReposition = () => updateMenuPosition();
     const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      if (
+        dropdownRef.current?.contains(target) ||
+        menuRef.current?.contains(target)
+      ) {
+        return;
+      }
+      setIsOpen(false);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
         setIsOpen(false);
       }
     };
+
+    window.addEventListener("resize", handleReposition);
+    window.addEventListener("scroll", handleReposition, true);
     document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("resize", handleReposition);
+      window.removeEventListener("scroll", handleReposition, true);
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isOpen, updateMenuPosition]);
 
   const buildColumns = (withId: boolean): TemplateColumn[] => {
     const cols: TemplateColumn[] = templateHeaders.map((h) => ({
@@ -139,19 +188,95 @@ export const CsvImportExport: React.FC<CsvImportExportProps> = ({
     });
 
   // We add ID_SISTEM to the expected headers for the modal if currentData is provided
-  const expectedHeadersWithId = currentData 
-    ? ["ID_SISTEM (JANGAN DIUBAH)", ...templateHeaders] 
+  const expectedHeadersWithId = currentData
+    ? ["ID_SISTEM (JANGAN DIUBAH)", ...templateHeaders]
     : templateHeaders;
+
+  const portalMenu =
+    typeof document !== "undefined"
+      ? createPortal(
+          <AnimatePresence>
+            {isOpen && menuCoords && (
+              <motion.div
+                ref={menuRef}
+                initial={{
+                  opacity: 0,
+                  y: menuCoords.placement === "top" ? -6 : 6,
+                  scale: 0.97,
+                }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{
+                  opacity: 0,
+                  y: menuCoords.placement === "top" ? -4 : 4,
+                  scale: 0.97,
+                }}
+                transition={{ duration: 0.15, ease: "easeOut" }}
+                style={{
+                  position: "fixed",
+                  top: menuCoords.top,
+                  bottom: menuCoords.bottom,
+                  left: menuCoords.left,
+                  width: `${menuCoords.width}px`,
+                }}
+                className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 z-[9999] overflow-hidden"
+              >
+                <div className="py-1">
+                  <button
+                    type="button"
+                    onClick={handleDownloadTemplate}
+                    disabled={isGenerating}
+                    className="flex items-center w-full px-4 py-3 text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors text-left disabled:opacity-50 cursor-pointer"
+                  >
+                    {isGenerating ? (
+                      <Loader2 className="w-4 h-4 mr-3 text-slate-400 shrink-0 animate-spin" />
+                    ) : (
+                      <Download className="w-4 h-4 mr-3 text-slate-400 shrink-0" />
+                    )}
+                    Download Template Excel (Dropdown)
+                  </button>
+
+                  {currentData && (
+                    <button
+                      type="button"
+                      onClick={handleDownloadInteractive}
+                      disabled={isGenerating}
+                      className="flex items-center w-full px-4 py-3 text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors text-left border-t border-slate-100 dark:border-slate-800 disabled:opacity-50 cursor-pointer"
+                    >
+                      <Database className="w-4 h-4 mr-3 text-brand-500 shrink-0" />
+                      Download Template &amp; Data Saat Ini (Edit Massal)
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsOpen(false);
+                      setIsModalOpen(true);
+                    }}
+                    className="flex items-center w-full px-4 py-3 text-xs sm:text-sm font-semibold text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-500/15 transition-colors text-left border-t border-slate-100 dark:border-slate-800 cursor-pointer"
+                  >
+                    <Upload className="w-4 h-4 mr-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                    Upload Excel / CSV
+                  </button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>,
+          document.body
+        )
+      : null;
 
   return (
     <>
       <div className="relative inline-block text-left" ref={dropdownRef}>
         <button
-          onClick={() => setIsOpen(!isOpen)}
-          className="flex items-center justify-center px-3 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors border border-slate-300 shadow-sm"
+          type="button"
+          onClick={() => setIsOpen((prev) => !prev)}
+          aria-expanded={isOpen}
+          className="flex items-center justify-center px-3 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors border border-slate-300 dark:border-slate-700 shadow-xs cursor-pointer whitespace-nowrap"
           title={buttonLabel}
         >
-          <FileSpreadsheet className="w-4 h-4 sm:mr-2 text-emerald-600" />
+          <FileSpreadsheet className="w-4 h-4 sm:mr-2 text-emerald-600 dark:text-emerald-400 shrink-0" />
           <span className="hidden sm:inline font-medium text-sm">{buttonLabel}</span>
           <ChevronDown
             className={`w-3 h-3 ml-2 hidden sm:block opacity-70 transition-transform duration-200 ${
@@ -159,64 +284,7 @@ export const CsvImportExport: React.FC<CsvImportExportProps> = ({
             }`}
           />
         </button>
-
-        <AnimatePresence>
-          {isOpen && (
-            <motion.div
-              initial={{ opacity: 0, y: 6, scale: 0.97 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 4, scale: 0.97 }}
-              transition={{ duration: 0.15, ease: "easeOut" }}
-              style={{
-                width: `${dropdownPos.width}px`,
-                maxWidth: "calc(100vw - 1.5rem)",
-                ...(dropdownPos.align === "left"
-                  ? { left: 0, right: "auto" }
-                  : dropdownPos.align === "right"
-                  ? { right: 0, left: "auto" }
-                  : { left: `${dropdownPos.customLeft}px`, right: "auto" }),
-              }}
-              className="absolute mt-2 bg-white rounded-2xl shadow-xl border border-slate-200 z-50 overflow-hidden"
-            >
-            <div className="py-1">
-              <button
-                onClick={handleDownloadTemplate}
-                disabled={isGenerating}
-                className="flex items-center w-full px-4 py-3 text-xs sm:text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors text-left disabled:opacity-50 cursor-pointer"
-              >
-                {isGenerating ? (
-                  <Loader2 className="w-4 h-4 mr-3 text-slate-400 shrink-0 animate-spin" />
-                ) : (
-                  <Download className="w-4 h-4 mr-3 text-slate-400 shrink-0" />
-                )}
-                Download Template Excel (Dropdown)
-              </button>
-              
-              {currentData && (
-                <button
-                  onClick={handleDownloadInteractive}
-                  disabled={isGenerating}
-                  className="flex items-center w-full px-4 py-3 text-xs sm:text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors text-left border-t border-slate-100 disabled:opacity-50 cursor-pointer"
-                >
-                  <Database className="w-4 h-4 mr-3 text-brand-500 shrink-0" />
-                  Download Template & Data Saat Ini (Edit Massal)
-                </button>
-              )}
-
-              <button
-                onClick={() => {
-                  setIsOpen(false);
-                  setIsModalOpen(true);
-                }}
-                className="flex items-center w-full px-4 py-3 text-xs sm:text-sm font-semibold text-emerald-700 hover:bg-emerald-50 transition-colors text-left border-t border-slate-100 cursor-pointer"
-              >
-                <Upload className="w-4 h-4 mr-3 text-emerald-600 shrink-0" />
-                Upload Excel / CSV
-              </button>
-            </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        {portalMenu}
       </div>
 
       <GenericImportModal

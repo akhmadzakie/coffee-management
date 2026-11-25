@@ -1983,9 +1983,9 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
       </div>
 
       {/* ── NAVIGATION & TOOLBAR ─────────────────────────────────────────── */}
-      <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 bg-white p-4 rounded-3xl border border-slate-200/80 shadow-xs">
+      <div className="flex flex-col 2xl:flex-row justify-between items-stretch 2xl:items-center gap-3 bg-white p-4 rounded-3xl border border-slate-200/80 shadow-xs">
         {/* Animated Sliding Pill Tab Switcher */}
-        <div className="flex p-1 bg-slate-100/90 rounded-2xl border border-slate-200/80 shadow-inner overflow-x-auto no-scrollbar max-w-full w-full xl:w-auto">
+        <div className="flex p-1 bg-slate-100/90 rounded-2xl border border-slate-200/80 shadow-inner overflow-x-auto no-scrollbar max-w-full w-full 2xl:w-auto">
           {[
             { id: "ingredients", label: `Daftar Bahan Baku (${accessibleIngredients.length})` },
             { id: "categories", label: `Kategori Bahan (${visibleCategoriesForManage.length})` },
@@ -1999,7 +1999,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as any)}
-                className={`relative px-4 py-2.5 rounded-xl text-xs font-bold transition-colors cursor-pointer whitespace-nowrap flex-1 xl:flex-none text-center ${
+                className={`relative px-4 py-2.5 rounded-xl text-xs font-bold transition-colors cursor-pointer whitespace-nowrap flex-1 2xl:flex-none text-center ${
                   isActive ? "text-slate-900" : "text-slate-500 hover:text-slate-800"
                 }`}
               >
@@ -2017,7 +2017,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
         </div>
 
         {/* Action Buttons */}
-        <div className="flex items-center gap-2 w-full xl:w-auto xl:justify-end overflow-x-auto no-scrollbar shrink-0">
+        <div className="flex flex-wrap items-center gap-2 w-full 2xl:w-auto 2xl:justify-end shrink-0">
           {activeTab === "ingredients" && !isReadOnly && (
             <>
               {currentUser?.role !== "LEADER" && (
