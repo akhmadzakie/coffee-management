@@ -293,9 +293,14 @@ export const GenericImportModal: React.FC<GenericImportModalProps> = ({
           {step === "done" && (
             <div className="text-center py-12">
               <div className="flex flex-col items-center gap-4">
-                <div className="w-20 h-20 rounded-full bg-emerald-100 flex items-center justify-center animate-in zoom-in duration-300">
-                  <CheckCircle2 className="w-10 h-10 text-emerald-600" />
-                </div>
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ type: "spring", damping: 22, stiffness: 320 }}
+                  className="w-20 h-20 rounded-full bg-emerald-100 dark:bg-emerald-500/20 flex items-center justify-center"
+                >
+                  <CheckCircle2 className="w-10 h-10 text-emerald-600 dark:text-emerald-400" />
+                </motion.div>
                 <div>
                   <p className="text-2xl font-bold text-slate-800">Import Berhasil!</p>
                   <p className="text-slate-500 mt-2">

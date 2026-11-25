@@ -1910,15 +1910,15 @@ export const LeaderChecklist: React.FC = () => {
                 </div>
 
                 {/* Toolbar Aksi Aturan */}
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-                  <div>
-                    <h4 className="font-bold text-slate-800 text-sm">Daftar Grade & Batas Persenan Pencairan</h4>
-                    <p className="text-xs text-slate-500">
+                <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3">
+                  <div className="min-w-0">
+                    <h4 className="font-bold text-slate-800 dark:text-slate-100 text-sm">Daftar Grade & Batas Persenan Pencairan</h4>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
                       Ubah batas skor minimal, maksimal, serta persentase tunjangan yang dicairkan.
                     </p>
                   </div>
 
-                  <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+                  <div className="flex items-center gap-2 flex-wrap shrink-0">
                     {canEditSettings && (
                       <>
                         <button

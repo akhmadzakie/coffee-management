@@ -349,7 +349,7 @@ const PosCustomizeModalContent: React.FC<PosCustomizeModalContentProps> = ({
               <label className="block text-xs font-bold text-slate-700 mb-2">
                 Tingkat Kemanisan (Sweetness)
               </label>
-              <div className="grid grid-cols-4 gap-1.5">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
                 {[
                   "Normal (100%)",
                   "Less (70%)",

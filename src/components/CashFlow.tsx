@@ -1677,8 +1677,8 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
     <>
       <div className="space-y-6 max-w-7xl mx-auto pb-12">
         {/* ─── Header & Quick Actions ────────────────────────────────────────── */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-5 sm:p-6 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-coffee-sm">
-          <div className="space-y-1">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-5 sm:p-6 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-coffee-sm">
+          <div className="space-y-1 min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-brand-50 dark:bg-brand-500/15 text-brand-700 dark:text-brand-300 border border-brand-200/60 dark:border-brand-500/30 shadow-2xs">
                 <Sparkles className="w-3.5 h-3.5 text-brand-600 dark:text-brand-300" />
@@ -1703,7 +1703,7 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
             </p>
           </div>
 
-          <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap shrink-0">
+          <div className="flex items-center gap-2 flex-wrap shrink-0">
             {!isReadOnly && (
               <button
                 type="button"

@@ -1715,7 +1715,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
                 </div>
 
                 {/* Metric Bars */}
-                <div className="grid grid-cols-4 gap-2 mb-4">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
                   <div className="p-3 bg-emerald-50/80 rounded-2xl border border-emerald-200/70 text-center">
                     <p className="text-lg font-black font-mono text-emerald-800">{attendanceStats.hadir}</p>
                     <p className="text-[10px] font-bold text-emerald-700 uppercase">Hadir</p>

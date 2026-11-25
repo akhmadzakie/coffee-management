@@ -366,7 +366,7 @@ const CategoryModalForm: React.FC<CategoryModalFormProps> = ({
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2 uppercase tracking-wider">
                   Pilih Ikon Simbol
                 </label>
-                <div className="grid grid-cols-8 gap-2 p-2 bg-slate-50 dark:bg-slate-800/70 rounded-2xl border border-slate-200 dark:border-slate-700 max-h-32 overflow-y-auto no-scrollbar">
+                <div className="grid grid-cols-5 sm:grid-cols-8 gap-2 p-2 bg-slate-50 dark:bg-slate-800/70 rounded-2xl border border-slate-200 dark:border-slate-700 max-h-32 overflow-y-auto no-scrollbar">
                   {AVAILABLE_ICONS.map((ic) => {
                     const Ic = ICON_MAP[ic] || Tag;
                     const isSelected = icon === ic;

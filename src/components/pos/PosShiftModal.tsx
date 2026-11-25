@@ -588,7 +588,7 @@ export const PosShiftModal: React.FC<PosShiftModalProps> = ({
                 </div>
 
                 {/* Quick nominal buttons */}
-                <div className="grid grid-cols-4 gap-2 mt-2">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-2">
                   {[100000, 200000, 300000, 500000].map((nom) => (
                     <button
                       key={nom}

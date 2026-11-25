@@ -392,7 +392,7 @@ export const PosPaymentModal: React.FC<PosPaymentModalProps> = ({
             <label className="text-xs font-bold text-slate-700 mb-2 block">
               Pilih Metode Pembayaran
             </label>
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               {[
                 { id: "CASH", label: "Tunai (Cash)", icon: Banknote },
                 { id: "QRIS", label: "QRIS Bank", icon: QrCode },
@@ -460,7 +460,7 @@ export const PosPaymentModal: React.FC<PosPaymentModalProps> = ({
                     Reset (0)
                   </button>
                 </label>
-                <div className="grid grid-cols-4 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   {[
                     { label: "+10.000", val: 10000 },
                     { label: "+20.000", val: 20000 },
@@ -601,7 +601,7 @@ export const PosPaymentModal: React.FC<PosPaymentModalProps> = ({
               <label className="text-xs font-bold text-slate-700 block">
                 Pilih Bank Mesin EDC
               </label>
-              <div className="grid grid-cols-4 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 {["BCA", "Mandiri", "BRI", "BNI"].map((b) => (
                   <button
                     key={b}
