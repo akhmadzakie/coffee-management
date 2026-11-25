@@ -4524,10 +4524,10 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.92, y: 15 }}
               transition={{ type: "spring", damping: 25, stiffness: 350 }}
-              className="bg-white rounded-3xl shadow-2xl w-full max-w-xl overflow-hidden max-h-[85vh] sm:max-h-[88vh] overflow-y-auto custom-scrollbar my-auto border border-slate-200/90"
+              className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl w-full max-w-xl overflow-hidden max-h-[90dvh] sm:max-h-[88vh] flex flex-col my-auto border border-slate-200/90 dark:border-slate-800"
             >
             {/* Modal Header */}
-            <div className="flex justify-between items-center p-4 sm:p-6 border-b border-slate-100 bg-slate-50/80">
+            <div className="shrink-0 flex justify-between items-center p-4 sm:p-6 border-b border-slate-100 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-800/60">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-2xl bg-brand-50 border border-brand-100 flex items-center justify-center text-brand-600 shrink-0">
                   <Package className="w-5 h-5" />
@@ -4556,7 +4556,8 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
               </button>
             </div>
 
-            <form onSubmit={handleSubmitIngredient} className="p-4 sm:p-6 space-y-4 text-xs">
+            <form onSubmit={handleSubmitIngredient} className="flex flex-col flex-1 min-h-0 text-xs">
+              <div className="flex-1 overflow-y-auto custom-scrollbar p-4 sm:p-6 space-y-4">
               {/* Toggle Mode Bahan Baku vs Bahan Olahan */}
               <div className="p-1 bg-slate-100 rounded-2xl grid grid-cols-2 gap-1 border border-slate-200/70">
                 <button
@@ -5146,19 +5147,20 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                   className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-base sm:text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all"
                 />
               </div>
+              </div>
 
               {/* Modal Footer */}
-              <div className="mt-6 flex items-center justify-end gap-2.5 pt-4 border-t border-slate-100">
+              <div className="shrink-0 px-4 sm:px-6 py-3.5 bg-slate-50/95 dark:bg-slate-800/80 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-2.5">
                 <button
                   type="button"
                   onClick={() => setIsIngredientModalOpen(false)}
-                  className="px-4 py-2.5 text-slate-600 hover:bg-slate-100 rounded-2xl font-bold cursor-pointer transition-colors"
+                  className="min-h-[44px] px-4 py-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-2xl font-bold cursor-pointer transition-colors"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white rounded-2xl font-bold shadow-xs active:scale-[0.98] transition-all cursor-pointer flex items-center gap-1.5"
+                  className="min-h-[44px] px-5 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-2xl font-bold shadow-xs active:scale-[0.98] transition-all cursor-pointer flex items-center gap-1.5"
                 >
                   <Check className="w-4 h-4" />
                   <span>{editingIngredient ? "Simpan Perubahan" : "Simpan Bahan Baku"}</span>
@@ -5188,9 +5190,9 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.92, y: 15 }}
               transition={{ type: "spring", damping: 25, stiffness: 350 }}
-              className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200/90 my-auto max-h-[85vh] sm:max-h-[88vh] overflow-y-auto custom-scrollbar"
+              className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200/90 dark:border-slate-800 my-auto max-h-[90dvh] sm:max-h-[88vh] flex flex-col"
             >
-            <div className="flex justify-between items-center p-4 sm:p-5 border-b border-slate-100 bg-slate-50/80">
+            <div className="shrink-0 flex justify-between items-center p-4 sm:p-5 border-b border-slate-100 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-800/60">
               <div className="flex items-center gap-2.5">
                 <div
                   className={`w-9 h-9 rounded-2xl flex items-center justify-center shrink-0 ${
@@ -5239,7 +5241,8 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
               </button>
             </div>
 
-            <form onSubmit={handleAddMovement} className="p-4 sm:p-5 space-y-4 text-xs">
+            <form onSubmit={handleAddMovement} className="flex flex-col flex-1 min-h-0 text-xs">
+              <div className="flex-1 overflow-y-auto custom-scrollbar p-4 sm:p-5 space-y-4">
               {/* Type Switcher Pills */}
               <div className="flex flex-wrap gap-1 p-1 bg-slate-100 rounded-2xl border border-slate-200/60">
                 <button
@@ -5495,19 +5498,20 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                   className="w-full px-3 py-2 rounded-xl border border-slate-200 text-base sm:text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all"
                 />
               </div>
+              </div>
 
               {/* Footer */}
-              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+              <div className="shrink-0 px-4 sm:px-5 py-3.5 bg-slate-50/95 dark:bg-slate-800/80 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setIsAddMovementOpen(false)}
-                  className="px-4 py-2.5 text-slate-600 hover:bg-slate-100 rounded-xl font-bold cursor-pointer transition-colors"
+                  className="min-h-[44px] px-4 py-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-xl font-bold cursor-pointer transition-colors"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
-                  className={`px-4.5 py-2.5 rounded-xl text-white font-bold cursor-pointer shadow-xs active:scale-[0.98] transition-all ${
+                  className={`min-h-[44px] px-4.5 py-2 rounded-xl text-white font-bold cursor-pointer shadow-xs active:scale-[0.98] transition-all ${
                     movementType === "TRANSFER"
                       ? "bg-brand-600 hover:bg-brand-700"
                       : movementType === "WASTE"
@@ -5747,9 +5751,9 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.92, y: 15 }}
             transition={{ type: "spring", damping: 25, stiffness: 350 }}
-            className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200/90 my-auto max-h-[88vh] overflow-y-auto custom-scrollbar"
+            className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200/90 dark:border-slate-800 my-auto max-h-[90dvh] sm:max-h-[88vh] flex flex-col"
           >
-            <div className="flex justify-between items-center p-4 sm:p-5 border-b border-slate-100 bg-rose-50/60">
+            <div className="shrink-0 flex justify-between items-center p-4 sm:p-5 border-b border-slate-100 dark:border-slate-800 bg-rose-50/60 dark:bg-rose-500/15">
               <div className="flex items-center gap-2.5">
                 <div className="w-10 h-10 rounded-2xl bg-rose-100 text-rose-700 flex items-center justify-center shrink-0 border border-rose-200 shadow-2xs">
                   <AlertTriangle className="w-5 h-5" />
@@ -5772,7 +5776,8 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
               </button>
             </div>
 
-            <form onSubmit={handleSaveQuickWaste} className="p-4 sm:p-5 space-y-4 text-xs">
+            <form onSubmit={handleSaveQuickWaste} className="flex flex-col flex-1 min-h-0 text-xs">
+              <div className="flex-1 overflow-y-auto custom-scrollbar p-4 sm:p-5 space-y-4">
               {/* Select Ingredient */}
               <div>
                 <label className="block font-bold text-slate-800 mb-1">
@@ -5929,19 +5934,20 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                   className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all"
                 />
               </div>
+              </div>
 
               {/* Action Buttons */}
-              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+              <div className="shrink-0 px-4 sm:px-5 py-3.5 bg-slate-50/95 dark:bg-slate-800/80 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setIsQuickWasteOpen(false)}
-                  className="px-4 py-2.5 text-slate-600 hover:bg-slate-100 rounded-xl font-bold cursor-pointer transition-colors"
+                  className="min-h-[44px] px-4 py-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-xl font-bold cursor-pointer transition-colors"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-bold cursor-pointer shadow-xs active:scale-[0.98] transition-all flex items-center gap-1.5"
+                  className="min-h-[44px] px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-bold cursor-pointer shadow-xs active:scale-[0.98] transition-all flex items-center gap-1.5"
                 >
                   <Check className="w-4 h-4" />
                   <span>Simpan & Potong Stok</span>
@@ -5973,9 +5979,9 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                   animate={{ scale: 1, opacity: 1 }}
                   exit={{ scale: 0.96, opacity: 0 }}
                   transition={{ type: "spring", damping: 28, stiffness: 360 }}
-                  className="my-auto bg-white dark:bg-slate-900 rounded-3xl shadow-2xl w-full max-w-lg max-h-[85vh] overflow-y-auto custom-scrollbar border border-slate-200/90 dark:border-slate-700"
+                  className="my-auto bg-white dark:bg-slate-900 rounded-3xl shadow-2xl w-full max-w-lg max-h-[90dvh] flex flex-col overflow-hidden border border-slate-200/90 dark:border-slate-700"
                 >
-                  <div className="flex justify-between items-center p-4 sm:p-6 border-b border-slate-100 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-800/60">
+                  <div className="shrink-0 flex justify-between items-center p-4 sm:p-6 border-b border-slate-100 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-800/60">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-2xl bg-brand-50 dark:bg-brand-500/20 border border-brand-100 dark:border-brand-500/30 flex items-center justify-center text-brand-600 dark:text-brand-300 shrink-0">
                         <Sliders className="w-5 h-5" />
@@ -6002,7 +6008,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                     </button>
                   </div>
 
-                  <div className="p-4 sm:p-6 space-y-4 text-xs">
+                  <div className="flex-1 overflow-y-auto custom-scrollbar p-4 sm:p-6 space-y-4 text-xs">
                     {/* Form Tambah Kategori Baru */}
                     {canManageCategories && (
                       <form
@@ -6126,6 +6132,19 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                         );
                       })}
                     </div>
+                  </div>
+                  <div className="shrink-0 px-4 sm:px-6 py-3 bg-slate-50/95 dark:bg-slate-800/80 border-t border-slate-100 dark:border-slate-800 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsCategoryModalOpen(false);
+                        setEditingCatOld(null);
+                        setEditingCatNew("");
+                      }}
+                      className="min-h-[44px] px-5 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold cursor-pointer transition-colors"
+                    >
+                      Selesai
+                    </button>
                   </div>
                 </motion.div>
               </motion.div>

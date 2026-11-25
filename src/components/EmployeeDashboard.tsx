@@ -1050,8 +1050,8 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
           </div>
 
           {/* Riwayat Absensi Terakhir */}
-          <div className="mt-6 pt-5 border-t border-slate-100">
-            <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-3">
+          <div className="mt-6 pt-5 border-t border-slate-100 dark:border-slate-800">
+            <h4 className="text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider mb-3">
               Riwayat 7 Kehadiran Terakhir
             </h4>
             {recentAttendances.length === 0 ? (
@@ -1059,68 +1059,128 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
                 Belum ada riwayat kehadiran tercatat.
               </p>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead>
-                    <tr className="border-b border-slate-100 text-slate-400 font-semibold">
-                      <th className="py-2 px-3">Tanggal</th>
-                      <th className="py-2 px-3">Status</th>
-                      <th className="py-2 px-3">Jam In/Out</th>
-                      <th className="py-2 px-3">Durasi</th>
-                      <th className="py-2 px-3 text-right">Verifikasi</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {recentAttendances.map((att) => (
-                      <tr key={att.id} className="border-b border-slate-50 hover:bg-slate-50/80">
-                        <td className="py-2.5 px-3 font-semibold text-slate-700">{att.date}</td>
-                        <td className="py-2.5 px-3">
-                          <span
-                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                              att.status === "HADIR"
-                                ? "bg-emerald-100 text-emerald-800"
-                                : att.status === "TERLAMBAT"
-                                ? "bg-amber-100 text-amber-800"
-                                : att.status === "ALPHA"
-                                ? "bg-rose-100 text-rose-800"
-                                : "bg-slate-100 text-slate-700"
-                            }`}
-                          >
-                            {att.status}
-                          </span>
-                        </td>
-                        <td className="py-2.5 px-3 font-mono text-slate-600 tabular-nums">
+              <>
+                {/* Mobile Card View (< md) */}
+                <div className="md:hidden space-y-2.5">
+                  {recentAttendances.map((att) => (
+                    <div
+                      key={att.id}
+                      className="rounded-xl bg-slate-50/90 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700/70 p-3 space-y-2"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-bold text-slate-800 dark:text-slate-100 tabular-nums">
+                          {att.date}
+                        </span>
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            att.status === "HADIR"
+                              ? "bg-emerald-100 dark:bg-emerald-500/20 text-emerald-800 dark:text-emerald-300"
+                              : att.status === "TERLAMBAT"
+                              ? "bg-amber-100 dark:bg-amber-500/20 text-amber-800 dark:text-amber-300"
+                              : att.status === "ALPHA"
+                              ? "bg-rose-100 dark:bg-rose-500/20 text-rose-800 dark:text-rose-300"
+                              : "bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200"
+                          }`}
+                        >
+                          {att.status}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between gap-2 text-[11px] text-slate-600 dark:text-slate-300">
+                        <span className="font-mono tabular-nums">
                           {att.clockInTime ? formatWitaTimeHm(att.clockInTime) : "-"}
-                          {" - "}
+                          {" – "}
                           {att.clockOutTime ? formatWitaTimeHm(att.clockOutTime) : "-"}
-                        </td>
-                        <td className="py-2.5 px-3 font-bold text-slate-700 tabular-nums">
-                          {att.clockInTime && att.clockOutTime
-                            ? `${calculateWorkDurationHours(att.clockInTime, att.clockOutTime).toFixed(1)} Jam`
-                            : "-"}
-                        </td>
-                        <td className="py-2.5 px-3 text-right">
-                          <span
-                            className={`text-[10px] font-bold ${
-                              att.approvalStatus === "APPROVED"
-                                ? "text-emerald-600"
-                                : att.approvalStatus === "REJECTED"
-                                ? "text-rose-600"
-                                : "text-amber-600"
-                            }`}
-                          >
-                            {att.approvalStatus === "APPROVED"
-                              ? "Sah ✓"
+                          {" · "}
+                          <strong className="text-slate-800 dark:text-slate-100">
+                            {att.clockInTime && att.clockOutTime
+                              ? `${calculateWorkDurationHours(att.clockInTime, att.clockOutTime).toFixed(1)} Jam`
+                              : "-"}
+                          </strong>
+                        </span>
+                        <span
+                          className={`font-bold shrink-0 ${
+                            att.approvalStatus === "APPROVED"
+                              ? "text-emerald-600 dark:text-emerald-400"
                               : att.approvalStatus === "REJECTED"
-                              ? "Ditolak ✗"
-                              : "Review"}
-                          </span>
-                        </td>
+                              ? "text-rose-600 dark:text-rose-400"
+                              : "text-amber-600 dark:text-amber-400"
+                          }`}
+                        >
+                          {att.approvalStatus === "APPROVED"
+                            ? "Sah ✓"
+                            : att.approvalStatus === "REJECTED"
+                            ? "Ditolak ✗"
+                            : "Review"}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Desktop Table View (>= md) */}
+                <div className="hidden md:block overflow-x-auto">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="border-b border-slate-100 dark:border-slate-800 text-slate-400 font-semibold">
+                        <th className="py-2 px-3">Tanggal</th>
+                        <th className="py-2 px-3">Status</th>
+                        <th className="py-2 px-3">Jam In/Out</th>
+                        <th className="py-2 px-3">Durasi</th>
+                        <th className="py-2 px-3 text-right">Verifikasi</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {recentAttendances.map((att) => (
+                        <tr key={att.id} className="border-b border-slate-50 dark:border-slate-800/70 hover:bg-slate-50/80 dark:hover:bg-slate-800/50">
+                          <td className="py-2.5 px-3 font-semibold text-slate-700 dark:text-slate-200">{att.date}</td>
+                          <td className="py-2.5 px-3">
+                            <span
+                              className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                att.status === "HADIR"
+                                  ? "bg-emerald-100 text-emerald-800"
+                                  : att.status === "TERLAMBAT"
+                                  ? "bg-amber-100 text-amber-800"
+                                  : att.status === "ALPHA"
+                                  ? "bg-rose-100 text-rose-800"
+                                  : "bg-slate-100 text-slate-700"
+                              }`}
+                            >
+                              {att.status}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-3 font-mono text-slate-600 dark:text-slate-300 tabular-nums">
+                            {att.clockInTime ? formatWitaTimeHm(att.clockInTime) : "-"}
+                            {" - "}
+                            {att.clockOutTime ? formatWitaTimeHm(att.clockOutTime) : "-"}
+                          </td>
+                          <td className="py-2.5 px-3 font-bold text-slate-700 dark:text-slate-200 tabular-nums">
+                            {att.clockInTime && att.clockOutTime
+                              ? `${calculateWorkDurationHours(att.clockInTime, att.clockOutTime).toFixed(1)} Jam`
+                              : "-"}
+                          </td>
+                          <td className="py-2.5 px-3 text-right">
+                            <span
+                              className={`text-[10px] font-bold ${
+                                att.approvalStatus === "APPROVED"
+                                  ? "text-emerald-600"
+                                  : att.approvalStatus === "REJECTED"
+                                  ? "text-rose-600"
+                                  : "text-amber-600"
+                              }`}
+                            >
+                              {att.approvalStatus === "APPROVED"
+                                ? "Sah ✓"
+                                : att.approvalStatus === "REJECTED"
+                                ? "Ditolak ✗"
+                                : "Review"}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             )}
           </div>
         </div>

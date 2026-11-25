@@ -1771,9 +1771,66 @@ export const LeaderChecklist: React.FC = () => {
                 </h4>
               </div>
 
-              <div className="overflow-x-auto">
+              {/* Mobile Card View Evaluasi Payroll (< md) */}
+              <div className="md:hidden space-y-3">
+                {monthlyDivisionStats.map((div) => (
+                  <div
+                    key={div.key}
+                    className="rounded-2xl bg-slate-50/90 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700/70 p-3.5 space-y-2.5"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="text-xs font-bold text-slate-900 dark:text-slate-100">{div.label}</p>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                          Leader: {div.leaderName}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span
+                          className={`px-2 py-0.5 rounded-full font-bold text-[10px] border ${
+                            div.monthlyEffectiveScore >= 90
+                              ? "bg-emerald-50 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-500/30"
+                              : div.monthlyEffectiveScore >= 80
+                              ? "bg-brand-50 dark:bg-brand-500/15 text-brand-700 dark:text-brand-300 border-brand-200 dark:border-brand-500/30"
+                              : div.monthlyEffectiveScore >= 70
+                              ? "bg-amber-50 dark:bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-500/30"
+                              : "bg-rose-50 dark:bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-300 dark:border-rose-500/30"
+                          }`}
+                        >
+                          {div.matchedGrade.grade}
+                        </span>
+                        <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-300 tabular-nums">
+                          Cair {div.matchedGrade.payoutPercentage}%
+                        </span>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-200/70 dark:border-slate-700 text-center">
+                      <div className="rounded-xl bg-white dark:bg-slate-900 p-2 border border-slate-200/60 dark:border-slate-700/60">
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400">Hari Terisi</p>
+                        <p className="text-xs font-mono font-bold text-slate-800 dark:text-slate-100 tabular-nums">
+                          {div.submittedDaysCount}/{div.elapsedDaysCount}
+                        </p>
+                      </div>
+                      <div className="rounded-xl bg-white dark:bg-slate-900 p-2 border border-slate-200/60 dark:border-slate-700/60">
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400">Disiplin</p>
+                        <p className="text-xs font-mono font-bold text-slate-800 dark:text-slate-100 tabular-nums">
+                          {div.submissionRate}%
+                        </p>
+                      </div>
+                      <div className="rounded-xl bg-white dark:bg-slate-900 p-2 border border-slate-200/60 dark:border-slate-700/60">
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400">Skor Efektif</p>
+                        <p className="text-xs font-mono font-black text-brand-700 dark:text-brand-300 tabular-nums">
+                          {div.monthlyEffectiveScore}%
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="hidden md:block overflow-x-auto">
                 <table className="w-full text-xs text-left">
-                  <thead className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
+                  <thead className="bg-slate-50 dark:bg-slate-800/70 text-slate-600 dark:text-slate-300 font-bold border-b border-slate-200 dark:border-slate-700">
                     <tr>
                       <th className="py-3 px-4">Divisi & Stasiun</th>
                       <th className="py-3 px-4">Leader Bertanggung Jawab</th>
@@ -1785,37 +1842,37 @@ export const LeaderChecklist: React.FC = () => {
                       <th className="py-3 px-4 text-center">Pencairan Tunjangan</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100">
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                     {monthlyDivisionStats.map((div) => (
-                      <tr key={div.key} className="hover:bg-slate-50/70 transition-colors">
-                        <td className="py-3 px-4 font-bold text-slate-800">{div.label}</td>
-                        <td className="py-3 px-4 text-slate-600">{div.leaderName}</td>
-                        <td className="py-3 px-4 text-center font-mono font-bold text-slate-800">
+                      <tr key={div.key} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/50 transition-colors">
+                        <td className="py-3 px-4 font-bold text-slate-800 dark:text-slate-100">{div.label}</td>
+                        <td className="py-3 px-4 text-slate-600 dark:text-slate-300">{div.leaderName}</td>
+                        <td className="py-3 px-4 text-center font-mono font-bold text-slate-800 dark:text-slate-100">
                           {div.submittedDaysCount} / {div.elapsedDaysCount} hari
                         </td>
-                        <td className="py-3 px-4 text-center font-mono text-slate-600">
+                        <td className="py-3 px-4 text-center font-mono text-slate-600 dark:text-slate-300">
                           {div.submissionRate}%
                         </td>
-                        <td className="py-3 px-4 text-center font-mono text-amber-600 font-bold">
+                        <td className="py-3 px-4 text-center font-mono text-amber-600 dark:text-amber-400 font-bold">
                           {div.avgScoreOnSubmittedDays}%
                         </td>
-                        <td className="py-3 px-4 text-center font-mono font-black text-slate-900 text-sm">
+                        <td className="py-3 px-4 text-center font-mono font-black text-slate-900 dark:text-slate-100 text-sm">
                           {div.monthlyEffectiveScore}%
                         </td>
                         <td className="py-3 px-4 text-center">
                           <span className={`px-2.5 py-0.5 rounded-full font-bold text-[11px] border ${
                             div.monthlyEffectiveScore >= 90
-                              ? "bg-emerald-50 text-emerald-700 border-emerald-300"
+                              ? "bg-emerald-50 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-500/30"
                               : div.monthlyEffectiveScore >= 80
-                              ? "bg-blue-50 text-blue-700 border-blue-300"
+                              ? "bg-brand-50 dark:bg-brand-500/15 text-brand-700 dark:text-brand-300 border-brand-200 dark:border-brand-500/30"
                               : div.monthlyEffectiveScore >= 70
-                              ? "bg-amber-50 text-amber-700 border-amber-300"
-                              : "bg-rose-50 text-rose-700 border-rose-300"
+                              ? "bg-amber-50 dark:bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-500/30"
+                              : "bg-rose-50 dark:bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-300 dark:border-rose-500/30"
                           }`}>
                             {div.matchedGrade.grade}
                           </span>
                         </td>
-                        <td className="py-3 px-4 text-center font-bold text-emerald-700">
+                        <td className="py-3 px-4 text-center font-bold text-emerald-700 dark:text-emerald-300">
                           Cair {div.matchedGrade.payoutPercentage}%
                         </td>
                       </tr>
@@ -1824,8 +1881,8 @@ export const LeaderChecklist: React.FC = () => {
                 </table>
               </div>
 
-              <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-900 flex items-start gap-2.5">
-                <Sparkles className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+              <div className="p-3 bg-brand-50/70 dark:bg-brand-500/15 border border-brand-200/80 dark:border-brand-500/30 rounded-xl text-xs text-brand-900 dark:text-brand-200 flex items-start gap-2.5">
+                <Sparkles className="w-4 h-4 text-brand-600 dark:text-brand-300 shrink-0 mt-0.5" />
                 <span>
                   <strong>Otomatis Terkoneksi ke Modul Payroll:</strong> Persentase pencairan tunjangan di atas langsung digunakan saat Anda meng-generate penggajian bulanan di menu <strong>HR &amp; Payroll</strong>. Tidak perlu lagi menghitung manual satu per satu!
                 </span>
@@ -2430,9 +2487,9 @@ export const LeaderChecklist: React.FC = () => {
                       animate={{ opacity: 1, scale: 1, y: 0 }}
                       exit={{ opacity: 0, scale: 0.96, y: 8 }}
                       transition={{ type: "spring", damping: 28, stiffness: 360 }}
-                      className="my-auto bg-white dark:bg-slate-900 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 border border-slate-200 dark:border-slate-800 max-h-[85vh] sm:max-h-[88vh] overflow-y-auto custom-scrollbar"
+                      className="my-auto bg-white dark:bg-slate-900 rounded-2xl max-w-md w-full shadow-2xl border border-slate-200 dark:border-slate-800 max-h-[90dvh] flex flex-col overflow-hidden"
                     >
-                <div className="flex justify-between items-center pb-3 border-b border-slate-100 dark:border-slate-800">
+                <div className="shrink-0 flex justify-between items-center px-5 py-4 border-b border-slate-100 dark:border-slate-800">
                   <div className="flex items-center gap-2">
                     <Award className="w-5 h-5 text-emerald-600" />
                     <h3 className="font-bold text-slate-900 dark:text-slate-100 text-base">
@@ -2442,13 +2499,13 @@ export const LeaderChecklist: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setIsRuleModalOpen(false)}
-                    className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+                    className="text-slate-400 hover:text-slate-600 p-1.5 cursor-pointer"
                   >
                     <XCircle className="w-5 h-5" />
                   </button>
                 </div>
 
-                <div className="space-y-3">
+                <div className="flex-1 overflow-y-auto custom-scrollbar p-5 space-y-3">
                   <div>
                     <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 block mb-1">
                       Nama Grade / Tingkat:
@@ -2525,18 +2582,18 @@ export const LeaderChecklist: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+                <div className="shrink-0 flex justify-end gap-2 px-5 py-3.5 bg-slate-50/95 dark:bg-slate-800/80 border-t border-slate-100 dark:border-slate-800">
                   <button
                     type="button"
                     onClick={() => setIsRuleModalOpen(false)}
-                    className="px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors cursor-pointer"
+                    className="min-h-[44px] px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-xl transition-colors cursor-pointer"
                   >
                     Batal
                   </button>
                   <button
                     type="button"
                     onClick={handleSaveRuleForm}
-                    className="px-4 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-xs transition-colors cursor-pointer"
+                    className="min-h-[44px] px-4 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-xs transition-colors cursor-pointer"
                   >
                     Simpan Aturan
                   </button>

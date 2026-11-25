@@ -421,7 +421,7 @@ export function ClockIn() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto space-y-5 pb-16">
+    <div className="max-w-2xl mx-auto space-y-5 pb-24 safe-area-bottom">
       {/* Toast Feedback */}
       <AnimatePresence>
         {feedback && (
@@ -470,7 +470,7 @@ export function ClockIn() {
               <button
                 type="button"
                 onClick={() => setActiveMode("ATTENDANCE")}
-                className={`relative px-3.5 py-1.5 rounded-xl transition-all cursor-pointer ${
+                className={`relative min-h-[44px] px-4 py-2.5 rounded-xl transition-all cursor-pointer ${
                   activeMode === "ATTENDANCE"
                     ? "text-slate-900 dark:text-slate-100"
                     : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
@@ -492,7 +492,7 @@ export function ClockIn() {
                     stopCamera();
                     setActiveMode("LEAVE");
                   }}
-                  className={`relative px-3.5 py-1.5 rounded-xl transition-all cursor-pointer ${
+                  className={`relative min-h-[44px] px-4 py-2.5 rounded-xl transition-all cursor-pointer ${
                     activeMode === "LEAVE"
                       ? "text-slate-900 dark:text-slate-100"
                       : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
@@ -827,7 +827,7 @@ export function ClockIn() {
               type="button"
               onClick={handleSubmit}
               disabled={isLoading || !photoDataUrl || !location}
-              className={`w-full py-4 rounded-2xl font-black text-white text-xs sm:text-sm transition-all shadow-md flex justify-center items-center gap-2 cursor-pointer ${
+              className={`w-full min-h-[48px] py-4 rounded-2xl font-black text-white text-xs sm:text-sm transition-all shadow-md flex justify-center items-center gap-2 cursor-pointer ${
                 isLoading || !photoDataUrl || !location
                   ? "bg-slate-300 cursor-not-allowed shadow-none"
                   : isClockedIn
@@ -875,7 +875,7 @@ export function ClockIn() {
                 type="button"
                 onClick={() => handleLeaveSubmit("IZIN")}
                 disabled={isLoading}
-                className="py-3.5 rounded-2xl font-bold text-white text-xs bg-brand-600 hover:bg-brand-700 active:scale-95 transition-all shadow-xs flex items-center justify-center gap-2 cursor-pointer"
+                className="min-h-[48px] py-3.5 rounded-2xl font-bold text-white text-xs bg-brand-600 hover:bg-brand-700 active:scale-95 transition-all shadow-xs flex items-center justify-center gap-2 cursor-pointer"
               >
                 <span>Ajukan Izin</span>
               </button>
@@ -883,7 +883,7 @@ export function ClockIn() {
                 type="button"
                 onClick={() => handleLeaveSubmit("SAKIT")}
                 disabled={isLoading}
-                className="py-3.5 rounded-2xl font-bold text-white text-xs bg-rose-600 hover:bg-rose-700 active:scale-95 transition-all shadow-xs flex items-center justify-center gap-2 cursor-pointer"
+                className="min-h-[48px] py-3.5 rounded-2xl font-bold text-white text-xs bg-rose-600 hover:bg-rose-700 active:scale-95 transition-all shadow-xs flex items-center justify-center gap-2 cursor-pointer"
               >
                 <span>Ajukan Sakit</span>
               </button>
