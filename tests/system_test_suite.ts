@@ -6071,11 +6071,12 @@ test("46b. Opsi 2 melindungi kategori bahan kritis (Bahan Olahan, Packaging & Cu
   assert.strictEqual(validateIngredientCategoryRename("Lainnya", "Umum").valid, false);
 });
 
-test("46c. Pos Kas Utama & Rekening Tabungan/Bank aktif dikunci hapus & jenisnya, akun kosong tetap boleh dihapus", () => {
+test("46c. Pos Kas Utama, Rekening Bank terhubung rekap & Tabungan aktif dikunci hapus/jenisnya, akun kosong tambahan boleh dihapus", () => {
   const mainCash: CashAccount = { id: "cash-drawer-main", name: "Laci Kasir Utama", type: "CASH", isDefault: true };
   const activeSavings: CashAccount = { id: "acc-sav-1", name: "Tabungan Cadangan", type: "SAVINGS", isDefault: false };
-  const emptyBank: CashAccount = { id: "acc-bank-empty", name: "Bank Mandiri Baru", type: "BANK", isDefault: false };
-  const allAccounts = [mainCash, activeSavings, emptyBank];
+  const primaryBank: CashAccount = { id: "acc-bank-1", name: "Rekening BCA Outlet", type: "BANK", isDefault: false };
+  const extraBankEmpty: CashAccount = { id: "acc-bank-2", name: "Rekening Mandiri Cadangan", type: "BANK", isDefault: false };
+  const emptyWallet: CashAccount = { id: "acc-ewallet-empty", name: "Dompet QRIS Baru", type: "E_WALLET", isDefault: false };
 
   const txs: CashTransaction[] = [
     {
@@ -6088,32 +6089,60 @@ test("46c. Pos Kas Utama & Rekening Tabungan/Bank aktif dikunci hapus & jenisnya
       category: "Transfer",
     },
   ];
+  const recaps = [{ bankAccountId: "acc-bank-1" }];
 
-  const mainProt = evaluateCashAccountProtection(mainCash, allAccounts, txs);
+  // 1. Jika hanya ada 1 BANK (walau 0 transaksi & 0 rekap), tetap terkunci karena terhubung Rekap Penjualan
+  const singleBankAccounts = [mainCash, activeSavings, primaryBank];
+  const singleBankProt = evaluateCashAccountProtection(primaryBank, singleBankAccounts, txs, []);
+  assert.strictEqual(singleBankProt.isOnlyBankAccount, true);
+  assert.strictEqual(singleBankProt.canDelete, false);
+  assert.strictEqual(singleBankProt.canChangeType, false);
+
+  // 2. Jika ada 2 BANK: bank tertaut Rekap Penjualan tetap terkunci walau 0 cash_transactions; bank ke-2 kosong boleh dihapus
+  const multiBankAccounts = [mainCash, activeSavings, primaryBank, extraBankEmpty, emptyWallet];
+  const linkedBankProt = evaluateCashAccountProtection(primaryBank, multiBankAccounts, txs, recaps);
+  assert.strictEqual(linkedBankProt.isOnlyBankAccount, false);
+  assert.strictEqual(linkedBankProt.linkedRecapCount, 1);
+  assert.strictEqual(linkedBankProt.canDelete, false);
+  assert.strictEqual(linkedBankProt.canChangeType, false);
+
+  const extraBankProt = evaluateCashAccountProtection(extraBankEmpty, multiBankAccounts, txs, recaps);
+  assert.strictEqual(extraBankProt.canDelete, true);
+  assert.strictEqual(extraBankProt.canChangeType, true);
+
+  const mainProt = evaluateCashAccountProtection(mainCash, multiBankAccounts, txs, recaps);
   assert.strictEqual(mainProt.canDelete, false);
   assert.strictEqual(mainProt.canChangeType, false);
 
-  const savProt = evaluateCashAccountProtection(activeSavings, allAccounts, txs);
+  const savProt = evaluateCashAccountProtection(activeSavings, multiBankAccounts, txs, recaps);
   assert.strictEqual(savProt.canDelete, false);
   assert.strictEqual(savProt.canChangeType, false);
   assert.strictEqual(savProt.balance, 1000000);
 
-  const emptyProt = evaluateCashAccountProtection(emptyBank, allAccounts, txs);
-  assert.strictEqual(emptyProt.canDelete, true);
-  assert.strictEqual(emptyProt.canChangeType, true);
+  const emptyWalletProt = evaluateCashAccountProtection(emptyWallet, multiBankAccounts, txs, recaps);
+  assert.strictEqual(emptyWalletProt.canDelete, true);
+  assert.strictEqual(emptyWalletProt.canChangeType, true);
 
-  // Sync guard melarang hapus akun utama/aktif dan mengunci type saat rename diizinkan
+  // 3. Sync guard menjaga kas utama, tabungan aktif, bank terakhir, & bank tertaut rekap sambil mengizinkan rename
   const synced = protectCashAccountsOnSync(
-    [{ id: "acc-sav-1", name: "Tabungan Toko BCA", type: "BANK", isDefault: false }],
-    allAccounts,
-    [{ accountId: "acc-sav-1" }]
+    [
+      { id: "acc-sav-1", name: "Tabungan Toko BCA", type: "E_WALLET", isDefault: false },
+      { id: "acc-bank-1", name: "BCA Kasir & QRIS", type: "CASH", isDefault: false },
+    ],
+    [mainCash, activeSavings, primaryBank],
+    [{ accountId: "acc-sav-1" }],
+    recaps
   );
   const syncedMain = synced.find((a) => a.id === "cash-drawer-main");
   const syncedSav = synced.find((a) => a.id === "acc-sav-1");
+  const syncedBank = synced.find((a) => a.id === "acc-bank-1");
   assert.ok(syncedMain, "Pos Kas Utama tidak boleh terhapus oleh sync");
   assert.ok(syncedSav, "Tabungan aktif tidak boleh terhapus oleh sync");
   assert.strictEqual(syncedSav?.name, "Tabungan Toko BCA");
   assert.strictEqual(syncedSav?.type, "SAVINGS");
+  assert.ok(syncedBank, "Rekening Bank terhubung Rekap Penjualan tidak boleh terhapus oleh sync");
+  assert.strictEqual(syncedBank?.name, "BCA Kasir & QRIS");
+  assert.strictEqual(syncedBank?.type, "BANK");
 });
 
 // -------------------------------------------------------------

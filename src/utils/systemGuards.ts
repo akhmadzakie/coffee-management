@@ -1,12 +1,14 @@
 import { CORE_EXPENSE_CATEGORY_IDS } from "./dataCleaning";
 import { normalizeIngredientCategoryName } from "./financeMetrics";
-import { CashAccount, CashTransaction, ExpenseCategory } from "../types";
+import { CashAccount, CashTransaction, DailySalesRecap, ExpenseCategory } from "../types";
 
 export type CriticalIngredientRole = "OLAHAN" | "PACKAGING" | "FALLBACK";
 
 export interface CashAccountProtection {
   isDefaultCash: boolean;
+  isOnlyBankAccount: boolean;
   linkedTxCount: number;
+  linkedRecapCount: number;
   balance: number;
   canDelete: boolean;
   deleteBlockReason?: string;
@@ -173,19 +175,23 @@ export function validateIngredientCategoryRename(
 }
 
 /**
- * Mengevaluasi aturan proteksi Pos Kas & Rekening Tabungan (`SAVINGS`):
+ * Mengevaluasi aturan proteksi Pos Kas, Rekening Bank, & Rekening Tabungan (`SAVINGS`):
  * - Pos Kas Utama (`isDefault` / `cash-drawer-main`): dilarang dihapus & jenis dikunci `CASH`.
- * - Akun dengan saldo != 0 atau riwayat transaksi (termasuk Tabungan): dilarang dihapus & dikunci jenisnya,
+ * - Satu-satunya Rekening Bank (`BANK`) yang aktif: dilarang dihapus & dikunci `BANK` karena terhubung ke Rekap Penjualan / Setor Kas.
+ * - Akun dengan saldo != 0, riwayat transaksi, atau tertaut ke Rekap Penjualan (`bankAccountId`): dilarang dihapus & dikunci jenisnya,
  *   hanya boleh diubah namanya.
- * - Akun non-default yang masih kosong (0 transaksi & saldo Rp 0): boleh dihapus / diubah jenisnya.
+ * - Akun non-default tambahan yang masih kosong (0 transaksi, saldo Rp 0, 0 tautan rekap, dan bukan BANK terakhir): boleh dihapus / diubah jenisnya.
  */
 export function evaluateCashAccountProtection(
   account: CashAccount,
   allAccounts: CashAccount[],
-  cashTransactions: CashTransaction[]
+  cashTransactions: CashTransaction[],
+  dailySalesRecaps: Pick<DailySalesRecap, "bankAccountId">[] = []
 ): CashAccountProtection {
   const isDefaultCash =
     Boolean(account.isDefault) || account.id === "cash-drawer-main";
+  const bankCount = allAccounts.filter((a) => a.type === "BANK").length;
+  const isOnlyBankAccount = account.type === "BANK" && bankCount <= 1;
 
   let linkedTxCount = 0;
   let balance = 0;
@@ -195,6 +201,11 @@ export function evaluateCashAccountProtection(
     const amt = Math.round(Number(t.amount) || 0);
     if (t.type === "CASH_IN") balance += amt;
     else if (t.type === "CASH_OUT") balance -= amt;
+  }
+
+  let linkedRecapCount = 0;
+  for (const r of dailySalesRecaps) {
+    if (r?.bankAccountId === account.id) linkedRecapCount += 1;
   }
 
   let canDelete = true;
@@ -207,6 +218,13 @@ export function evaluateCashAccountProtection(
   } else if (allAccounts.length <= 1) {
     canDelete = false;
     deleteBlockReason = "Minimal harus ada 1 Pos Kas aktif di sistem.";
+  } else if (isOnlyBankAccount) {
+    canDelete = false;
+    deleteBlockReason =
+      "Minimal harus ada 1 Rekening Bank aktif karena terhubung otomatis ke Rekap Penjualan (QRIS/EDC/Ojol) & Setor Kas. Anda tetap dapat mengubah namanya.";
+  } else if (linkedRecapCount > 0) {
+    canDelete = false;
+    deleteBlockReason = `Rekening ini terhubung ke ${linkedRecapCount} Rekap Penjualan (termasuk pencairan non-tunai) sehingga tidak dapat dihapus. Anda tetap dapat mengubah namanya.`;
   } else if (linkedTxCount > 0 || balance !== 0) {
     canDelete = false;
     deleteBlockReason =
@@ -222,6 +240,14 @@ export function evaluateCashAccountProtection(
     canChangeType = false;
     typeLockReason =
       "Jenis Pos Kas Utama dikunci sebagai Tunai (CASH) untuk integrasi laci kasir POS.";
+  } else if (isOnlyBankAccount) {
+    canChangeType = false;
+    typeLockReason =
+      "Jenis Rekening Bank utama dikunci sebagai BANK agar Rekap Penjualan & pencairan non-tunai selalu memiliki rekening tujuan.";
+  } else if (linkedRecapCount > 0) {
+    canChangeType = false;
+    typeLockReason =
+      "Jenis rekening dikunci karena sudah tertaut ke Rekap Penjualan / pencairan non-tunai. Nama rekening tetap dapat diubah.";
   } else if (linkedTxCount > 0 || balance !== 0) {
     canChangeType = false;
     typeLockReason =
@@ -232,7 +258,9 @@ export function evaluateCashAccountProtection(
 
   return {
     isDefaultCash,
+    isOnlyBankAccount,
     linkedTxCount,
+    linkedRecapCount,
     balance,
     canDelete,
     deleteBlockReason,
@@ -243,15 +271,16 @@ export function evaluateCashAccountProtection(
 
 /**
  * Penjaga sisi server saat `/api/sync` untuk `cash_accounts`:
- * - Mencegah penghapusan Pos Kas Utama maupun akun yang sudah memiliki transaksi di DB.
- * - Mengunci `type` (dan `isDefault` kas utama) sesuai DB jika sudah ada transaksi, sambil mengizinkan rename `name`.
+ * - Mencegah penghapusan Pos Kas Utama, rekening bank terakhir, rekening yang tertaut Rekap Penjualan, maupun akun dengan transaksi di DB.
+ * - Mengunci `type` (dan `isDefault` kas utama) sesuai DB jika terproteksi, sambil mengizinkan rename `name`.
  */
 export function protectCashAccountsOnSync<
   T extends { id?: string; type?: string; isDefault?: boolean }
 >(
   incoming: T[],
   existingDb: T[],
-  existingTxDb: Array<{ accountId?: string | null }>
+  existingTxDb: Array<{ accountId?: string | null }>,
+  existingRecapsDb: Array<{ bankAccountId?: string | null }> = []
 ): T[] {
   const txCountByAccount = new Map<string, number>();
   for (const tx of existingTxDb) {
@@ -260,14 +289,40 @@ export function protectCashAccountsOnSync<
     txCountByAccount.set(accId, (txCountByAccount.get(accId) || 0) + 1);
   }
 
+  const recapCountByAccount = new Map<string, number>();
+  for (const recap of existingRecapsDb) {
+    const bankId = String(recap?.bankAccountId || "");
+    if (!bankId) continue;
+    recapCountByAccount.set(bankId, (recapCountByAccount.get(bankId) || 0) + 1);
+  }
+
   const protectedExistingMap = new Map<string, T>();
   for (const acc of existingDb) {
     const id = String(acc?.id || "");
     if (!id) continue;
     const isDefaultCash = Boolean(acc.isDefault) || id === "cash-drawer-main";
     const hasTxs = (txCountByAccount.get(id) || 0) > 0;
-    if (isDefaultCash || hasTxs) {
+    const hasRecaps = (recapCountByAccount.get(id) || 0) > 0;
+    if (isDefaultCash || hasTxs || hasRecaps) {
       protectedExistingMap.set(id, acc);
+    }
+  }
+
+  // Ensure at least 1 BANK account survives if existingDb had any BANK account
+  const existingBanks = existingDb.filter((a) => a?.type === "BANK" && a?.id);
+  const incomingHasBankAfterLock = incoming.some((row) => {
+    const id = String(row?.id || "");
+    const locked = protectedExistingMap.get(id);
+    const effectiveType = locked ? locked.type : row?.type;
+    return effectiveType === "BANK";
+  });
+  if (existingBanks.length > 0 && !incomingHasBankAfterLock) {
+    // Prefer an existing BANK account already present in incoming so its name edit is honored; else fallback to first existing BANK
+    const preferredExistingBank =
+      existingBanks.find((eb) => incoming.some((row) => String(row?.id || "") === String(eb.id))) ||
+      existingBanks[0];
+    if (preferredExistingBank?.id) {
+      protectedExistingMap.set(String(preferredExistingBank.id), preferredExistingBank);
     }
   }
 

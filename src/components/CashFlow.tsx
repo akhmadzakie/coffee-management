@@ -1439,7 +1439,8 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
       const protection = evaluateCashAccountProtection(
         editingAccount,
         cashAccounts,
-        cashTransactions
+        cashTransactions,
+        dailySalesRecaps
       );
       updateCashAccount({
         ...editingAccount,
@@ -2065,7 +2066,8 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
                 const accProtection = evaluateCashAccountProtection(
                   acc,
                   cashAccounts,
-                  cashTransactions
+                  cashTransactions,
+                  dailySalesRecaps
                 );
                 return (
                   <div
@@ -4095,7 +4097,8 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
                           ? evaluateCashAccountProtection(
                               editingAccount,
                               cashAccounts,
-                              cashTransactions
+                              cashTransactions,
+                              dailySalesRecaps
                             )
                           : null;
                         const isTypeLocked = Boolean(editProt && !editProt.canChangeType);

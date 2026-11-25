@@ -2587,7 +2587,12 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     const prevAcc = cashAccounts.find((a) => a.id === acc.id);
     let safeAcc = acc;
     if (prevAcc) {
-      const protection = evaluateCashAccountProtection(prevAcc, cashAccounts, cashTransactions);
+      const protection = evaluateCashAccountProtection(
+        prevAcc,
+        cashAccounts,
+        cashTransactions,
+        dailySalesRecaps
+      );
       if (!protection.canChangeType) {
         safeAcc = {
           ...acc,
@@ -2609,7 +2614,12 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     if (currentUser?.role === "OWNER") return;
     const targetAcc = cashAccounts.find((a) => a.id === id);
     if (!targetAcc) return;
-    const protection = evaluateCashAccountProtection(targetAcc, cashAccounts, cashTransactions);
+    const protection = evaluateCashAccountProtection(
+      targetAcc,
+      cashAccounts,
+      cashTransactions,
+      dailySalesRecaps
+    );
     if (!protection.canDelete) return;
     const { updatedAccounts, updatedTransactions, transactionsChanged } =
       cascadeCashAccountDelete({

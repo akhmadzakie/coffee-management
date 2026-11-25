@@ -3170,10 +3170,14 @@ async function startServer() {
           const existingDbCashTxs = await tx
             .select({ accountId: schema.cashTransactions.accountId })
             .from(schema.cashTransactions);
+          const existingDbRecaps = await tx
+            .select({ bankAccountId: schema.dailySalesRecaps.bankAccountId })
+            .from(schema.dailySalesRecaps);
           guardedCashAccounts = protectCashAccountsOnSync(
             cash_accounts,
             existingDbCashAccounts,
-            existingDbCashTxs
+            existingDbCashTxs,
+            existingDbRecaps
           );
           await tx.delete(schema.cashAccounts);
         }
