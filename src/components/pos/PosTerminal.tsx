@@ -43,7 +43,8 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { toast } from "../../context/ToastContext";
-import { ThemeToggleButton } from "../../context/ThemeContext";
+import { ThemeToggleButton, useTheme } from "../../context/ThemeContext";
+import { resolveThemeLogo } from "../../utils/brandLogo";
 import { ConfirmModal } from "../common/ConfirmModal";
 import { PosPaymentModal } from "./PosPaymentModal";
 import { PosOpenBillsModal } from "./PosOpenBillsModal";
@@ -83,6 +84,7 @@ interface CartItem {
 
 export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavigateBack }) => {
   const { currentUser, settings, shifts, cashAccounts, recipes, logout, users, promotions, syncData } = useStore();
+  const { isDark } = useTheme();
 
   // State menu & catalog
   const [menuList, setMenuList] = useState<MenuItem[]>([]);
@@ -1080,9 +1082,9 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
         <div className="flex items-center justify-between w-full sm:w-auto gap-2">
           <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
             <img
-              src="/logo-icon-color.png"
-              alt="Julia's"
-              className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl object-contain shadow-xs border border-brand-200 shrink-0"
+              src={resolveThemeLogo(settings?.logoDataUrl, isDark, "icon")}
+              alt={settings?.brandName || "Julia's"}
+              className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl object-contain p-1 bg-brand-50 dark:bg-brand-950/60 shadow-xs border border-brand-200/80 dark:border-brand-700/60 shrink-0"
             />
             <div className="min-w-0">
               <h1 className="text-xs sm:text-sm font-bold text-slate-900 flex items-center gap-1.5 sm:gap-2 truncate">

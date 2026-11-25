@@ -1,6 +1,15 @@
 // System Test Suite - Julia's Coffee Management POS & ERP
 import assert from "node:assert";
 import crypto from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
+import {
+  BUILTIN_DEFAULT_LOGOS,
+  DEFAULT_BRAND_LOGO_SETTING,
+  isCustomBrandLogo,
+  resolveBrandLogo,
+  resolveThemeLogo,
+} from "../src/utils/brandLogo";
 import {
   DEFAULT_STORE_TIMEZONE,
   getLocalDateString,
@@ -5934,6 +5943,45 @@ test("44f. findUnlinkedStaffUsers & buildEmployeeDraftFromUser mendeteksi akun F
   const finDraft = buildEmployeeDraftFromUser(unlinked[1], "2026-11-25");
   assert.strictEqual(finDraft.position, "Finance & Accounting");
   assert.strictEqual(finDraft.department, "Finance");
+});
+
+// -------------------------------------------------------------
+// 45. PENGUJIAN ADAPTIVE BRAND LOGO SUITE (LIGHT / DARK / PRINT)
+// -------------------------------------------------------------
+test("45. brandLogo resolver memilih varian logo adaptif & menghormati logo kustom", () => {
+  assert.strictEqual(isCustomBrandLogo(null), false);
+  assert.strictEqual(isCustomBrandLogo(""), false);
+  assert.strictEqual(isCustomBrandLogo(DEFAULT_BRAND_LOGO_SETTING), false);
+  assert.strictEqual(isCustomBrandLogo("/logo-name-blue.png"), false);
+  assert.strictEqual(isCustomBrandLogo("data:image/png;base64,iVBORw0KGgo="), true);
+  assert.strictEqual(isCustomBrandLogo("https://cdn.example.com/custom.png"), true);
+
+  // Built-in defaults route by context & theme
+  assert.strictEqual(resolveBrandLogo(DEFAULT_BRAND_LOGO_SETTING, "icon-on-dark"), "/logo-icon-color.png");
+  assert.strictEqual(resolveBrandLogo(DEFAULT_BRAND_LOGO_SETTING, "icon-on-light"), "/logo-icon-blue.png");
+  assert.strictEqual(resolveBrandLogo(DEFAULT_BRAND_LOGO_SETTING, "name-on-dark"), "/logo-name-white.png");
+  assert.strictEqual(resolveBrandLogo(DEFAULT_BRAND_LOGO_SETTING, "name-on-light"), "/logo-name-blue.png");
+  assert.strictEqual(resolveBrandLogo(DEFAULT_BRAND_LOGO_SETTING, "mono-print"), "/logo-wordmark-mono.png");
+  assert.strictEqual(resolveThemeLogo(null, true, "name"), "/logo-name-white.png");
+  assert.strictEqual(resolveThemeLogo(null, false, "name"), "/logo-name-blue.png");
+  assert.strictEqual(resolveThemeLogo(DEFAULT_BRAND_LOGO_SETTING, true, "icon"), "/logo-icon-color.png");
+  assert.strictEqual(resolveThemeLogo(DEFAULT_BRAND_LOGO_SETTING, false, "icon"), "/logo-icon-blue.png");
+
+  // Custom uploaded logo overrides built-in contexts cleanly
+  const customLogo = "data:image/png;base64,CUSTOMDATA";
+  assert.strictEqual(resolveBrandLogo(customLogo, "icon-on-dark"), customLogo);
+  assert.strictEqual(resolveBrandLogo(customLogo, "mono-print"), customLogo);
+  assert.strictEqual(resolveThemeLogo(customLogo, false, "name"), customLogo);
+
+  // Ensure every built-in logo & PWA icon exists on disk in public/
+  const publicDir = path.resolve(process.cwd(), "public");
+  for (const relPath of BUILTIN_DEFAULT_LOGOS) {
+    const filePath = path.join(publicDir, relPath.replace(/^\//, ""));
+    assert.ok(fs.existsSync(filePath), `File logo bawaan harus tersedia di public/: ${relPath}`);
+  }
+  for (const pwaFile of ["favicon.png", "apple-touch-icon.png", "icon-192.png", "icon-512.png"]) {
+    assert.ok(fs.existsSync(path.join(publicDir, pwaFile)), `Ikon PWA harus tersedia: ${pwaFile}`);
+  }
 });
 
 // -------------------------------------------------------------

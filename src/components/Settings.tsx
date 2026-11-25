@@ -28,6 +28,7 @@ import {
 import { ConnectedDevices } from "./ConnectedDevices";
 import { DataCleaningPanel } from "./DataCleaningPanel";
 import { CustomSelect } from "./common/CustomSelect";
+import { DEFAULT_BRAND_LOGO_SETTING, isCustomBrandLogo } from "../utils/brandLogo";
 
 export const SettingsComponent = () => {
   const { settings, updateSettings, currentUser } = useStore();
@@ -185,7 +186,7 @@ export const SettingsComponent = () => {
   const removeLogo = () => {
     if (isOwner) return;
     setHasEdited(true);
-    setLogoDataUrl(null);
+    setLogoDataUrl(DEFAULT_BRAND_LOGO_SETTING);
   };
 
   return (
@@ -269,44 +270,80 @@ export const SettingsComponent = () => {
             </label>
 
             <div className="flex flex-col sm:flex-row items-start gap-4 sm:gap-6">
-              <div className="shrink-0 flex flex-col items-center gap-2">
-                <div className="w-28 h-28 sm:w-32 sm:h-32 border-2 border-dashed border-slate-300 rounded-2xl flex items-center justify-center bg-slate-50 overflow-hidden relative group shadow-2xs">
-                  {logoDataUrl ? (
-                    <>
+              <div className="shrink-0 flex flex-col items-start gap-2 w-full sm:w-auto">
+                {isCustomBrandLogo(logoDataUrl) ? (
+                  <>
+                    <div className="w-28 h-28 sm:w-32 sm:h-32 border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-2xl flex items-center justify-center bg-slate-100 dark:bg-slate-800 overflow-hidden relative group shadow-2xs">
                       <img
-                        src={logoDataUrl}
+                        src={logoDataUrl as string}
                         alt="Company Logo"
                         className="w-full h-full object-contain p-2"
                       />
                       {!isOwner && (
-                        <div className="absolute inset-0 bg-black/60 hidden group-hover:flex items-center justify-center transition-all">
+                        <div className="absolute inset-0 bg-slate-900/60 hidden group-hover:flex items-center justify-center transition-all">
                           <button
                             type="button"
                             onClick={removeLogo}
                             className="text-white text-xs font-bold px-3 py-1.5 bg-rose-600 hover:bg-rose-700 rounded-xl cursor-pointer"
                           >
-                            {language === "id" ? "Hapus" : "Remove"}
+                            {language === "id" ? "Reset" : "Reset"}
                           </button>
                         </div>
                       )}
-                    </>
-                  ) : (
-                    <div className="text-center p-4">
-                      <Building2 className="mx-auto h-8 w-8 text-slate-400" />
-                      <p className="mt-1 text-xs text-slate-500 font-medium">
-                        {language === "id" ? "Belum ada logo" : "No logo"}
-                      </p>
                     </div>
-                  )}
-                </div>
-                {logoDataUrl && !isOwner && (
-                  <button
-                    type="button"
-                    onClick={removeLogo}
-                    className="text-xs font-bold px-3 py-1.5 text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-xl cursor-pointer transition-colors"
-                  >
-                    {language === "id" ? "Hapus Logo" : "Remove Logo"}
-                  </button>
+                    {!isOwner && (
+                      <button
+                        type="button"
+                        onClick={removeLogo}
+                        className="text-xs font-bold px-3 py-1.5 text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-500/15 hover:bg-rose-100 dark:hover:bg-rose-500/25 border border-rose-200 dark:border-rose-500/30 rounded-xl cursor-pointer transition-colors"
+                      >
+                        {language === "id" ? "Kembalikan Logo Bawaan" : "Restore Default Logo"}
+                      </button>
+                    )}
+                  </>
+                ) : (
+                  <div className="w-full sm:w-64 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/90 dark:bg-slate-900/80 p-3 space-y-2 shadow-2xs">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="rounded-xl bg-white border border-slate-200 p-2.5 flex flex-col items-center justify-center gap-1.5">
+                        <img
+                          src="/logo-name-blue.png"
+                          alt="Logo Light Mode"
+                          className="h-7 w-auto object-contain"
+                        />
+                        <span className="text-[10px] font-bold text-slate-500">Mode Terang</span>
+                      </div>
+                      <div className="rounded-xl bg-brand-gradient border border-brand-700 p-2.5 flex flex-col items-center justify-center gap-1.5">
+                        <img
+                          src="/logo-name-white.png"
+                          alt="Logo Dark Mode"
+                          className="h-7 w-auto object-contain"
+                        />
+                        <span className="text-[10px] font-bold text-white/90">Gelap &amp; Sidebar</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between gap-2 px-1 pt-0.5">
+                      <div className="flex items-center gap-1.5">
+                        <img
+                          src="/logo-icon-blue.png"
+                          alt="Ikon Terang"
+                          className="w-6 h-6 object-contain rounded-lg bg-white border border-slate-200 p-0.5"
+                        />
+                        <img
+                          src="/logo-icon-color.png"
+                          alt="Ikon Gelap"
+                          className="w-6 h-6 object-contain rounded-lg bg-slate-900 border border-slate-700 p-0.5"
+                        />
+                        <img
+                          src="/logo-wordmark-mono.png"
+                          alt="Logo Struk Thermal"
+                          className="h-5 w-auto object-contain rounded bg-white border border-slate-200 px-1 py-0.5"
+                        />
+                      </div>
+                      <span className="text-[10px] font-semibold text-brand-700 dark:text-brand-300">
+                        Adaptif Aktif
+                      </span>
+                    </div>
+                  </div>
                 )}
               </div>
 

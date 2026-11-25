@@ -23,6 +23,7 @@ import { PayrollRecord } from "../types";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 import { exportSinglePayslipPDF } from "../utils/export";
+import { resolveBrandLogo } from "../utils/brandLogo";
 
 interface PayslipModalProps {
   payroll: PayrollRecord;
@@ -297,8 +298,20 @@ export const PayslipModal: React.FC<PayslipModalProps> = ({ payroll, onClose }) 
             {/* Header: Brand & Outlet */}
             <div className="border-b-2 border-slate-900 pb-4 mb-5 flex flex-col sm:flex-row sm:items-start justify-between gap-3">
               <div>
+                <img
+                  src={resolveBrandLogo(
+                    settings.logoDataUrl,
+                    printMode === "thermal" ? "mono-print" : "wordmark-on-light"
+                  )}
+                  alt={settings.brandName || "Julia's"}
+                  className={
+                    printMode === "thermal"
+                      ? "h-8 w-auto object-contain mb-1.5"
+                      : "h-9 w-auto object-contain mb-1.5"
+                  }
+                />
                 <div className="flex items-center gap-2">
-                  <span className="text-xl font-black text-slate-900 tracking-tight">
+                  <span className="text-base font-black text-slate-900 tracking-tight">
                     {settings.brandName || "COFFEE SHOP MANAGEMENT"}
                   </span>
                 </div>

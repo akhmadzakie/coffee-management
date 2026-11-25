@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useTheme, ThemeToggleButton } from "../context/ThemeContext";
+import { resolveThemeLogo } from "../utils/brandLogo";
 
 export const Login = () => {
   const { login, settings, users, wasForceLoggedOut, dismissForceLogoutAlert, lastLoginError } = useStore();
@@ -219,11 +220,13 @@ export const Login = () => {
       <header className="w-full max-w-5xl flex items-center justify-between z-10 py-2">
         <div className="flex items-center gap-3">
           <img
-            src={isDark ? "/logo-name-white.png" : "/logo-name-blue.png"}
-            alt="Julia's"
+            src={resolveThemeLogo(settings?.logoDataUrl, isDark, "name")}
+            alt={settings?.brandName || "Julia's"}
             className="h-10 w-auto object-contain"
             onError={(e) => {
-              (e.currentTarget as HTMLImageElement).src = "/logo-icon-color.png";
+              (e.currentTarget as HTMLImageElement).src = isDark
+                ? "/logo-icon-color.png"
+                : "/logo-icon-blue.png";
             }}
           />
           <div className="border-l border-slate-200 dark:border-slate-800 pl-3 hidden sm:block">

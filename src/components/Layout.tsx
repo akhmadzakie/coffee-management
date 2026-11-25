@@ -5,6 +5,7 @@ import { useTranslation } from "../utils/i18n";
 import { useStore } from "../store/StoreContext";
 import { toast } from "../context/ToastContext";
 import { ThemeToggleButton } from "../context/ThemeContext";
+import { resolveBrandLogo } from "../utils/brandLogo";
 import { SwitchAccountModal } from "./SwitchAccountModal";
 import { ExportModal } from "./ExportModal";
 import { AIAssistantModal, type ParsedTransactionDraft } from "./AIAssistantModal";
@@ -930,14 +931,14 @@ export const Layout: React.FC<LayoutProps> = ({
           <div className="flex items-center gap-3 min-w-0">
             {isSidebarCollapsed ? (
               <img
-                src={settings.logoDataUrl || "/logo-icon-color.png"}
+                src={resolveBrandLogo(settings.logoDataUrl, "icon-on-dark")}
                 alt={settings.brandName || "Julia's"}
-                className="w-9 h-9 object-contain rounded-xl shadow-xs"
+                className="w-9 h-9 object-contain rounded-xl"
               />
             ) : (
               <div className="flex items-center gap-2.5 min-w-0">
                 <img
-                  src={settings.logoDataUrl || "/logo-name-white.png"}
+                  src={resolveBrandLogo(settings.logoDataUrl, "name-on-dark")}
                   alt={settings.brandName || "Julia's"}
                   className="h-8 max-h-9 w-auto object-contain rounded-md"
                 />
@@ -1524,7 +1525,7 @@ export const Layout: React.FC<LayoutProps> = ({
                 <div className="pt-[max(env(safe-area-inset-top,0px),1rem)] pb-3 px-4 border-b border-brand-800 flex items-center justify-between bg-brand-gradient text-white shrink-0 shadow-xs">
                   <div className="flex items-center gap-2.5">
                     <img
-                      src={settings.logoDataUrl || "/logo-name-white.png"}
+                      src={resolveBrandLogo(settings.logoDataUrl, "name-on-dark")}
                       alt={settings.brandName || "Julia's"}
                       className="h-8 w-auto object-contain rounded-md"
                     />

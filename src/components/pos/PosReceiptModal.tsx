@@ -12,6 +12,7 @@ import {
   buildCashDrawerKickCommand,
 } from "../../utils/escpos";
 import { buildWhatsAppReceiptUrl } from "../../utils/whatsappReceipt";
+import { resolveBrandLogo } from "../../utils/brandLogo";
 import {
   Printer,
   CheckCircle2,
@@ -175,7 +176,12 @@ export const PosReceiptModal: React.FC<PosReceiptModalProps> = ({ orderData, onC
           >
             {/* Header Struk */}
             <div className="text-center pb-3 border-b border-dashed border-slate-400">
-              <h2 className="text-sm font-black uppercase tracking-wider">
+              <img
+                src={resolveBrandLogo(settings?.logoDataUrl, "mono-print")}
+                alt={settings?.brandName || "Julia's"}
+                className="h-8 w-auto mx-auto mb-1.5 object-contain"
+              />
+              <h2 className="text-xs font-black uppercase tracking-wider mt-0.5">
                 {settings?.brandName || "Julia's"}
               </h2>
               <p className="text-[10px] text-slate-600 mt-0.5">

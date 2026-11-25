@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { useStore } from "../../store/StoreContext";
 import { DEFAULT_STORE_TIMEZONE } from "../../utils/dateUtils";
 import { useTheme, ThemeToggleButton } from "../../context/ThemeContext";
+import { resolveThemeLogo } from "../../utils/brandLogo";
 import {
   Coffee,
   Lock,
@@ -183,24 +184,26 @@ export const PosCashierLogin: React.FC<PosCashierLoginProps> = ({ onLoginSuccess
       <header className="w-full max-w-4xl flex items-center justify-between z-10 py-2 border-b border-slate-200/80 dark:border-slate-800 pb-4">
         <div className="flex items-center gap-3">
           <img
-            src={isDark ? "/logo-name-white.png" : "/logo-name-blue.png"}
-            alt="Julia's"
+            src={resolveThemeLogo(settings?.logoDataUrl, isDark, "name")}
+            alt={settings?.brandName || "Julia's"}
             className="h-11 w-auto object-contain"
             onError={(e) => {
-              (e.currentTarget as HTMLImageElement).src = "/logo-icon-color.png";
+              (e.currentTarget as HTMLImageElement).src = isDark
+                ? "/logo-icon-color.png"
+                : "/logo-icon-blue.png";
             }}
           />
-          <div className="border-l border-slate-200 pl-3 hidden sm:block">
+          <div className="border-l border-slate-200 dark:border-slate-800 pl-3 hidden sm:block">
             <div className="flex items-center gap-2">
-              <h1 className="text-base font-black tracking-tight text-slate-900 uppercase">
+              <h1 className="text-base font-black tracking-tight text-slate-900 dark:text-slate-100 uppercase">
                 Julia's
               </h1>
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-brand-50 text-brand-700 font-bold border border-brand-200 flex items-center gap-1">
-                <Store className="w-3 h-3 text-brand-600" />
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-brand-50 dark:bg-brand-500/15 text-brand-700 dark:text-brand-300 font-bold border border-brand-200 dark:border-brand-500/30 flex items-center gap-1">
+                <Store className="w-3 h-3 text-brand-600 dark:text-brand-400" />
                 TERMINAL KASIR
               </span>
             </div>
-            <p className="text-xs text-slate-500 font-medium">
+            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
               Specialty Room • Coffee • Eatery
             </p>
           </div>
