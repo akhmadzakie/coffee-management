@@ -32,12 +32,12 @@ export const RupiahSign: React.FC<RupiahSignProps> = ({
       {...props}
     >
       {/* Letter R */}
-      <path d="M4.5 5.5v13.5" />
-      <path d="M4.5 5.5h4.5a3.5 3.5 0 0 1 0 7h-4.5" />
-      <path d="M8 12.5l4.5 6.5" />
+      <path d="M3 4.5v12" />
+      <path d="M3 4.5h4.25a3.25 3.25 0 0 1 0 6.5H3" />
+      <path d="M7.25 11L10.5 16.5" />
       {/* Letter p */}
-      <path d="M15 9.5v9.5" />
-      <path d="M15 11a3 3 0 1 1 0 6" />
+      <path d="M14 9.5v11" />
+      <path d="M14 9.5h3.5a3.5 3.5 0 0 1 0 7H14" />
     </svg>
   );
 };
