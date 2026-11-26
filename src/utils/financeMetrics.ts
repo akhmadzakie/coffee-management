@@ -2593,16 +2593,41 @@ export interface RevenueCategoryBreakdownRow {
 }
 
 export interface RevenueCategoryBreakdownResult {
+  breakdownSource: "PRODUCT_DIVISION" | "CASH_CATEGORY";
   rows: RevenueCategoryBreakdownRow[];
   totalSalesCashIn: number;
   totalOtherCashIn: number;
   totalRevenueCashIn: number;
 }
 
-/** Mengelompokkan kas masuk operasional per sub-kategori Pendapatan (Minuman/BAR, Makanan, Pastry, Lainnya). */
+/** Mendeteksi kas masuk penjualan gabungan otomatis dari Rekap Harian, POS, atau batch impor (bukan khusus satu divisi). */
+export function isCombinedAutoSalesCashTx(
+  t: Pick<CashTransaction, "category" | "categoryId" | "description" | "referenceId">
+): boolean {
+  const ref = String(t.referenceId || "").trim().toLowerCase();
+  if (ref.startsWith("recap-") || ref.startsWith("sales-log-") || ref.startsWith("pos-")) {
+    return true;
+  }
+  const catLower = String(t.category || "").trim().toLowerCase();
+  if (catLower === "penjualan menu & kasir" || catLower === "penjualan toko") {
+    return true;
+  }
+  const desc = String(t.description || "").trim().toLowerCase();
+  return (
+    desc.startsWith("omzet penjualan") ||
+    desc.startsWith("omzet non-tunai") ||
+    desc.startsWith("sinkronisasi omzet") ||
+    desc.startsWith("pemasukan penjualan")
+  );
+}
+
+/** Mengelompokkan pendapatan per divisi produk (bila data POS/Impor tersedia) atau per sub-kategori Pendapatan & Rekap gabungan. */
 export function computeRevenueCategoryBreakdown(params: {
   cashTransactions: CashTransaction[];
   expenseCategories?: ExpenseCategory[];
+  salesTransactions?: SalesTransaction[];
+  products?: Product[];
+  recognizedSalesTotal?: number;
   period: string;
   startDate?: string;
   endDate?: string;
@@ -2610,6 +2635,9 @@ export function computeRevenueCategoryBreakdown(params: {
   const {
     cashTransactions = [],
     expenseCategories = [],
+    salesTransactions = [],
+    products = [],
+    recognizedSalesTotal,
     period,
     startDate,
     endDate,
@@ -2635,6 +2663,139 @@ export function computeRevenueCategoryBreakdown(params: {
     return matchesPeriodDate(rawDate, period);
   };
 
+  // Hitung pendapatan non-penjualan & penjualan manual dari kas operasional
+  const otherIncomeTxs: CashTransaction[] = [];
+  for (const t of cashTransactions) {
+    if (String(t.type || "").toUpperCase() !== "CASH_IN") continue;
+    if (!matchesRange(t.date)) continue;
+    if (isNonOperationalCashTransaction(t)) continue;
+    if (!isSalesCashTransaction(t, expenseCategories)) {
+      otherIncomeTxs.push(t);
+    }
+  }
+
+  // Cek apakah periode memiliki transaksi produk terinci (POS / Impor Excel)
+  const periodProductSales = (salesTransactions || []).filter(
+    (s) => matchesRange(s.date) && getSaleTransactionAmount(s) > 0
+  );
+
+  if (periodProductSales.length > 0) {
+    const productDivLookup = new Map<string, "BAR" | "KITCHEN" | "BAKER">();
+    for (const p of products || []) {
+      const div = p.division;
+      if (div !== "BAR" && div !== "KITCHEN" && div !== "BAKER") continue;
+      const baseName = String(p.name || "").trim().toLowerCase();
+      if (baseName && !productDivLookup.has(baseName)) {
+        productDivLookup.set(baseName, div);
+      }
+      for (const v of p.variants || []) {
+        const vName = String(v.name || "").trim().toLowerCase();
+        if (baseName && vName) {
+          productDivLookup.set(`${baseName} (${vName})`, div);
+          productDivLookup.set(`${baseName} - ${vName}`, div);
+        }
+      }
+    }
+
+    const resolveSaleDivision = (menuName?: string | null): "BAR" | "KITCHEN" | "BAKER" | "UNMAPPED" => {
+      const clean = String(menuName || "").trim().toLowerCase();
+      if (!clean) return "UNMAPPED";
+      const direct = productDivLookup.get(clean);
+      if (direct) return direct;
+      const strippedParen = clean.replace(/\s*\([^)]*\)\s*$/, "").trim();
+      if (strippedParen && productDivLookup.has(strippedParen)) {
+        return productDivLookup.get(strippedParen)!;
+      }
+      const strippedDash = clean.replace(/\s*-\s*[^-]+$/, "").trim();
+      if (strippedDash && productDivLookup.has(strippedDash)) {
+        return productDivLookup.get(strippedDash)!;
+      }
+      for (const [pName, div] of productDivLookup.entries()) {
+        if (clean.startsWith(`${pName} (`) || clean.startsWith(`${pName} - `)) {
+          return div;
+        }
+      }
+      return "UNMAPPED";
+    };
+
+    const divTotals: Record<"BAR" | "KITCHEN" | "BAKER" | "UNMAPPED", { amt: number; count: number }> = {
+      BAR: { amt: 0, count: 0 },
+      KITCHEN: { amt: 0, count: 0 },
+      BAKER: { amt: 0, count: 0 },
+      UNMAPPED: { amt: 0, count: 0 },
+    };
+
+    for (const s of periodProductSales) {
+      const amt = Math.round(getSaleTransactionAmount(s));
+      if (amt <= 0) continue;
+      const div = resolveSaleDivision(s.menuName);
+      divTotals[div].amt += amt;
+      divTotals[div].count += 1;
+    }
+
+    const totalProductSales =
+      divTotals.BAR.amt + divTotals.KITCHEN.amt + divTotals.BAKER.amt + divTotals.UNMAPPED.amt;
+
+    const rawRows: Omit<RevenueCategoryBreakdownRow, "sharePercent">[] = [
+      { categoryId: "div-bar", name: "Divisi BAR (Minuman)", isSales: true, amount: divTotals.BAR.amt, txCount: divTotals.BAR.count },
+      { categoryId: "div-kitchen", name: "Divisi Kitchen (Makanan)", isSales: true, amount: divTotals.KITCHEN.amt, txCount: divTotals.KITCHEN.count },
+      { categoryId: "div-baker", name: "Divisi Bakery & Pastry", isSales: true, amount: divTotals.BAKER.amt, txCount: divTotals.BAKER.count },
+    ];
+    if (divTotals.UNMAPPED.amt > 0) {
+      rawRows.push({
+        categoryId: "div-unmapped",
+        name: "Menu Belum Terpetakan di Katalog",
+        isSales: true,
+        amount: divTotals.UNMAPPED.amt,
+        txCount: divTotals.UNMAPPED.count,
+      });
+    }
+
+    const cleanRecognized = Math.max(0, Math.round(Number(recognizedSalesTotal) || 0));
+    const salesGap = cleanRecognized > totalProductSales ? cleanRecognized - totalProductSales : 0;
+    if (salesGap > 0) {
+      rawRows.push({
+        categoryId: "combined-sales-gap",
+        name: "Penjualan Gabungan (Rekap Belum Terinci per Menu)",
+        isSales: true,
+        amount: salesGap,
+        txCount: 0,
+      });
+    }
+
+    let totalOtherCashIn = 0;
+    const otherAmt = Math.round(
+      otherIncomeTxs.reduce((sum, t) => sum + Math.max(0, Number(t.amount) || 0), 0)
+    );
+    if (otherAmt > 0) {
+      totalOtherCashIn = otherAmt;
+      rawRows.push({
+        categoryId: "cat-pendapatan-lain",
+        name: "Pendapatan Lain (Buku Kas)",
+        isSales: false,
+        amount: otherAmt,
+        txCount: otherIncomeTxs.length,
+      });
+    }
+
+    const totalSalesCashIn = totalProductSales + salesGap;
+    const totalRevenueCashIn = totalSalesCashIn + totalOtherCashIn;
+    return {
+      breakdownSource: "PRODUCT_DIVISION",
+      rows: rawRows.map((r) => ({
+        ...r,
+        sharePercent:
+          totalRevenueCashIn > 0
+            ? Math.round((r.amount / totalRevenueCashIn) * 1000) / 10
+            : 0,
+      })),
+      totalSalesCashIn,
+      totalOtherCashIn,
+      totalRevenueCashIn,
+    };
+  }
+
+  // Mode 2: Tidak ada item produk di periode — rincikan berdasarkan Buku Kas & Rekap Gabungan
   const incomeSubCategories = (expenseCategories || [])
     .filter((c) => c.type === "PENDAPATAN" && c.parentId !== null && c.isActive !== false)
     .sort((a, b) => (Number(a.sortOrder) || 0) - (Number(b.sortOrder) || 0) || a.name.localeCompare(b.name));
@@ -2689,6 +2850,19 @@ export function computeRevenueCategoryBreakdown(params: {
 
     const amt = Math.max(0, Math.round(Number(t.amount) || 0));
     if (amt <= 0) continue;
+
+    if (isCombinedAutoSalesCashTx(t)) {
+      const bucket = ensureBucket(
+        "combined-sales",
+        "Penjualan Toko Gabungan (Rekap / Kasir)",
+        true,
+        -1
+      );
+      bucket.amount += amt;
+      bucket.txCount += 1;
+      totalSalesCashIn += amt;
+      continue;
+    }
 
     const directCat = t.categoryId ? byId.get(t.categoryId) : undefined;
     const matchedCat =
@@ -2751,6 +2925,7 @@ export function computeRevenueCategoryBreakdown(params: {
     }));
 
   return {
+    breakdownSource: "CASH_CATEGORY",
     rows,
     totalSalesCashIn,
     totalOtherCashIn,

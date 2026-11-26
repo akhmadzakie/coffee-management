@@ -812,6 +812,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
         settings,
         periodLabel: getPeriodLabelText(),
         expenseCategories,
+        products,
       });
     } catch (err) {
       console.error("Gagal ekspor Excel:", err);

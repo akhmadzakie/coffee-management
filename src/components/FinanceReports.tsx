@@ -264,6 +264,9 @@ const FinanceReports: React.FC = () => {
     return computeRevenueCategoryBreakdown({
       cashTransactions,
       expenseCategories,
+      salesTransactions,
+      products,
+      recognizedSalesTotal: netSales,
       period: filterMode === "monthly" ? period : "ALL",
       ...(filterMode === "range"
         ? { startDate: normalizedRangeStart, endDate: normalizedRangeEnd }
@@ -272,6 +275,9 @@ const FinanceReports: React.FC = () => {
   }, [
     cashTransactions,
     expenseCategories,
+    salesTransactions,
+    products,
+    netSales,
     filterMode,
     period,
     normalizedRangeStart,
@@ -1547,7 +1553,20 @@ const FinanceReports: React.FC = () => {
                   </tr>
                   <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
                     <td className="p-3 sm:px-6 pl-8 text-slate-700 dark:text-slate-300">
-                      Penjualan Toko / Omzet Kotor (Gross Sales)
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span>Penjualan Toko / Omzet Kotor (Gross Sales)</span>
+                        <span
+                          className={`text-[9px] px-2 py-0.5 rounded-full font-bold border ${
+                            revenueCategoryBreakdown.breakdownSource === "PRODUCT_DIVISION"
+                              ? "bg-emerald-50 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-200/70 dark:border-emerald-500/30"
+                              : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700"
+                          }`}
+                        >
+                          {revenueCategoryBreakdown.breakdownSource === "PRODUCT_DIVISION"
+                            ? "Pecahan Otomatis Divisi Produk"
+                            : "Rincian Buku Kas / Rekap"}
+                        </span>
+                      </div>
                     </td>
                     <td className="p-3 text-right font-mono tabular-nums text-slate-600 dark:text-slate-300">
                       {formatCurrency(grossSales)}

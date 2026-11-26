@@ -6,6 +6,7 @@ import {
   StockMovement,
   CashTransaction,
   Settings,
+  ExpenseCategory,
   PayrollRecord,
   DailyAttendance,
   KPIRecord,
@@ -19,6 +20,7 @@ import {
 import { formatCurrency } from "./format";
 import { DEFAULT_STORE_TIMEZONE, getLocalDateString } from "./dateUtils";
 import {
+  computeRevenueCategoryBreakdown,
   getSaleTransactionAmount,
   isNonOperationalCashTransaction,
 } from "./financeMetrics";
@@ -402,13 +404,63 @@ export const exportFinanceToPDF = ({
   finance,
   settings,
   periodLabel,
+  expenseCategories = [],
+  sales = [],
+  products = [],
 }: {
   finance: CashTransaction[];
   settings: Settings;
   periodLabel: string;
+  expenseCategories?: ExpenseCategory[];
+  sales?: SalesTransaction[];
+  products?: Product[];
 }) => {
   const doc = createJsPdfDoc();
   setupPdfHeader(doc, settings, "Laporan Arus Kas", periodLabel);
+
+  const revBreakdown = computeRevenueCategoryBreakdown({
+    cashTransactions: finance,
+    expenseCategories,
+    salesTransactions: sales,
+    products,
+    period: "ALL",
+  });
+
+  let cashTableStartY = 56;
+  if (revBreakdown.rows.length > 0 && revBreakdown.totalRevenueCashIn > 0) {
+    autoTable(doc, {
+      startY: 56,
+      head: [["Rincian Pendapatan (" + (revBreakdown.breakdownSource === "PRODUCT_DIVISION" ? "Per Divisi Produk" : "Buku Kas & Rekap") + ")", "Jenis", "Tx", "Nominal (Rp)", "Porsi"]],
+      body: revBreakdown.rows.map((r) => [
+        r.name,
+        r.isSales ? "Penjualan" : "Lainnya",
+        String(r.txCount),
+        formatCurrency(r.amount),
+        `${r.sharePercent.toFixed(1)}%`,
+      ]),
+      theme: "grid",
+      headStyles: {
+        fillColor: [241, 245, 249],
+        textColor: [15, 23, 42],
+        fontStyle: "bold",
+        fontSize: 8,
+        lineColor: [226, 232, 240],
+        lineWidth: 0.1,
+      },
+      bodyStyles: {
+        textColor: [71, 85, 105],
+        fontSize: 8,
+        lineColor: [226, 232, 240],
+        lineWidth: 0.1,
+      },
+      columnStyles: {
+        2: { halign: "center" },
+        3: { halign: "right", fontStyle: "bold" },
+        4: { halign: "center" },
+      },
+    });
+    cashTableStartY = ((doc as any).lastAutoTable?.finalY || 56) + 8;
+  }
 
   const tableData =
     finance.length > 0
@@ -434,7 +486,7 @@ export const exportFinanceToPDF = ({
   const netCash = totalIn - totalOut;
 
   autoTable(doc, {
-    startY: 56,
+    startY: cashTableStartY,
     head: [["Tanggal", "Jenis", "Kategori", "Keterangan", "Jumlah (Rp)"]],
     body: tableData,
     theme: "grid",

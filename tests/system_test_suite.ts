@@ -6684,6 +6684,85 @@ test("49d. cat-penjualan-pastry dikenali isSalesCashTransaction dan dipecah akur
   assert.strictEqual(rowMap.get("cat-pendapatan-lain")?.amount, 200000);
 });
 
+test("49e. computeRevenueCategoryBreakdown memisahkan Rekap gabungan otomatis & memecah omzet otomatis per Divisi Produk", () => {
+  const categories: ExpenseCategory[] = [
+    { id: "cat-pendapatan", name: "Pendapatan", type: "PENDAPATAN", parentId: null, color: "#10B981", icon: "trending-up", isActive: true, sortOrder: 1 },
+    { id: "cat-penjualan", name: "Penjualan BAR", type: "PENDAPATAN", parentId: "cat-pendapatan", color: "#34D399", icon: "coffee", isActive: true, sortOrder: 1 },
+    { id: "cat-penjualan-makanan", name: "Penjualan Makanan", type: "PENDAPATAN", parentId: "cat-pendapatan", color: "#6EE7B7", icon: "utensils", isActive: true, sortOrder: 2 },
+    { id: "cat-penjualan-pastry", name: "Penjualan Pastry", type: "PENDAPATAN", parentId: "cat-pendapatan", color: "#10B981", icon: "cake", isActive: true, sortOrder: 3 },
+    { id: "cat-pendapatan-lain", name: "Pendapatan Lain", type: "PENDAPATAN", parentId: "cat-pendapatan", color: "#A7F3D0", icon: "plus-circle", isActive: true, sortOrder: 4 },
+  ];
+
+  // Skenario 1: Hanya ada Rekap Harian otomatis (tanpa detail item produk) -> jangan masuk ke Penjualan BAR
+  const recapCashOnly: CashTransaction[] = [
+    {
+      id: "cash-recap-1",
+      accountId: "bank-bca",
+      type: "CASH_IN",
+      date: "2026-05-14",
+      amount: 1200000,
+      description: "Omzet Non-Tunai (QRIS) - 2026-05-14",
+      category: "Penjualan Menu & Kasir",
+      categoryId: "cat-penjualan",
+      referenceId: "recap-noncash:rcp-1",
+    },
+    {
+      id: "cash-pastry-manual",
+      accountId: "cash-main",
+      type: "CASH_IN",
+      date: "2026-05-14",
+      amount: 300000,
+      description: "Titip jual croissant",
+      category: "Penjualan Pastry",
+      categoryId: "cat-penjualan-pastry",
+    },
+  ];
+
+  const mode2 = computeRevenueCategoryBreakdown({
+    cashTransactions: recapCashOnly,
+    expenseCategories: categories,
+    period: "2026-05",
+  });
+  assert.strictEqual(mode2.breakdownSource, "CASH_CATEGORY");
+  const m2Map = new Map(mode2.rows.map((r) => [r.categoryId, r]));
+  assert.strictEqual(m2Map.get("combined-sales")?.amount, 1200000);
+  assert.strictEqual(m2Map.get("cat-penjualan")?.amount, 0);
+  assert.strictEqual(m2Map.get("cat-penjualan-pastry")?.amount, 300000);
+
+  // Skenario 2: Ada data penjualan produk (POS / Impor Excel) -> otomatis dipecah ke BAR / Kitchen / Baker + gap rekap + pendapatan lain
+  const products: Product[] = [
+    { id: "p-bar", name: "Kopi Susu", category: "Coffee", division: "BAR", isActive: true, variants: [], createdAt: "", updatedAt: "" },
+    { id: "p-kit", name: "Nasi Goreng", category: "Food", division: "KITCHEN", isActive: true, variants: [], createdAt: "", updatedAt: "" },
+    { id: "p-bak", name: "Butter Croissant", category: "Pastry", division: "BAKER", isActive: true, variants: [], createdAt: "", updatedAt: "" },
+  ];
+  const sales: SalesTransaction[] = [
+    { id: "s1", date: "2026-05-15", menuName: "Kopi Susu (Iced)", quantitySold: 10, totalPrice: 250000, importLogId: "log1" },
+    { id: "s2", date: "2026-05-15", menuName: "Nasi Goreng", quantitySold: 5, totalPrice: 200000, importLogId: "log1" },
+    { id: "s3", date: "2026-05-15", menuName: "Butter Croissant", quantitySold: 10, totalPrice: 350000, importLogId: "log1" },
+  ];
+  const cashWithOther: CashTransaction[] = [
+    ...recapCashOnly,
+    { id: "cash-event", accountId: "bank-bca", type: "CASH_IN", date: "2026-05-16", amount: 200000, description: "Sewa ruang", category: "Pendapatan Lain", categoryId: "cat-pendapatan-lain" },
+  ];
+
+  const mode1 = computeRevenueCategoryBreakdown({
+    cashTransactions: cashWithOther,
+    expenseCategories: categories,
+    salesTransactions: sales,
+    products,
+    recognizedSalesTotal: 1000000,
+    period: "2026-05",
+  });
+  assert.strictEqual(mode1.breakdownSource, "PRODUCT_DIVISION");
+  const m1Map = new Map(mode1.rows.map((r) => [r.categoryId, r]));
+  assert.strictEqual(m1Map.get("div-bar")?.amount, 250000);
+  assert.strictEqual(m1Map.get("div-kitchen")?.amount, 200000);
+  assert.strictEqual(m1Map.get("div-baker")?.amount, 350000);
+  assert.strictEqual(m1Map.get("combined-sales-gap")?.amount, 200000);
+  assert.strictEqual(m1Map.get("cat-pendapatan-lain")?.amount, 200000);
+  assert.strictEqual(mode1.totalRevenueCashIn, 1200000);
+});
+
 // -------------------------------------------------------------
 // HASIL AKHIR
 // -------------------------------------------------------------

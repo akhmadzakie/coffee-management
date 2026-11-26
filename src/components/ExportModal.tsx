@@ -366,7 +366,14 @@ export const ExportModal: React.FC<ExportModalProps> = ({
     } else if (activeModule === "menu_catalog") {
       exportMenuCatalogToPDF({ products, settings, periodLabel });
     } else if (activeModule === "finance") {
-      exportFinanceToPDF({ finance: filteredFinance, settings, periodLabel });
+      exportFinanceToPDF({
+        finance: filteredFinance,
+        settings,
+        periodLabel,
+        expenseCategories,
+        sales: filteredSales,
+        products,
+      });
     } else if (activeModule === "payroll") {
       exportPayrollToPDF({
         payroll: filteredPayroll,
@@ -472,6 +479,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
           settings,
           periodLabel,
           expenseCategories,
+          products,
         });
       } else if (activeModule === "sales") {
         await exportSalesToXlsx({ sales: filteredSales, settings, periodLabel });
@@ -500,6 +508,8 @@ export const ExportModal: React.FC<ExportModalProps> = ({
           settings,
           periodLabel,
           expenseCategories,
+          sales: filteredSales,
+          products,
         });
       } else if (activeModule === "payroll") {
         await exportPayrollToXlsx({

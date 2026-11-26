@@ -65,6 +65,8 @@ export interface ExportFinanceXlsxOptions {
   settings: Settings;
   periodLabel: string;
   expenseCategories?: ExpenseCategory[];
+  sales?: SalesTransaction[];
+  products?: Product[];
 }
 
 export const exportFinanceToXlsx = async ({
@@ -72,6 +74,8 @@ export const exportFinanceToXlsx = async ({
   settings,
   periodLabel,
   expenseCategories = [],
+  sales = [],
+  products = [],
 }: ExportFinanceXlsxOptions) => {
   const brandName = settings.brandName || "Julia's • Specialty Room • Coffee • Eatery";
   const operationalFinance = finance.filter((f) => !isNonOperationalCashTransaction(f));
@@ -93,6 +97,8 @@ export const exportFinanceToXlsx = async ({
   const revBreakdown = computeRevenueCategoryBreakdown({
     cashTransactions: finance,
     expenseCategories,
+    salesTransactions: sales,
+    products,
     period: "ALL",
   });
 
@@ -114,9 +120,13 @@ export const exportFinanceToXlsx = async ({
       },
       {
         name: "Rincian Pendapatan",
-        title: "Rincian Pendapatan per Kategori",
-        subtitle: `Periode: ${periodLabel}`,
-        headers: ["Kategori Pendapatan", "Jenis", "Jumlah Transaksi", "Total Nominal (Rp)", "Kontribusi (%)"],
+        title: "Rincian Pendapatan per Divisi & Kategori",
+        subtitle: `Periode: ${periodLabel} • Sumber: ${
+          revBreakdown.breakdownSource === "PRODUCT_DIVISION"
+            ? "Pecahan Divisi Produk"
+            : "Buku Kas & Rekap"
+        }`,
+        headers: ["Kategori / Divisi Pendapatan", "Jenis", "Jumlah Transaksi", "Total Nominal (Rp)", "Kontribusi (%)"],
         rows: revBreakdown.rows.map((r) => [
           r.name,
           r.isSales ? "Penjualan" : "Pendapatan Lain",
@@ -812,6 +822,7 @@ export interface ExportMasterExecutiveOptions {
   settings: Settings;
   periodLabel: string;
   expenseCategories?: ExpenseCategory[];
+  products?: Product[];
 }
 
 export const exportMasterExecutiveReportXlsx = async ({
@@ -825,6 +836,8 @@ export const exportMasterExecutiveReportXlsx = async ({
   employees,
   settings,
   periodLabel,
+  expenseCategories = [],
+  products = [],
 }: ExportMasterExecutiveOptions) => {
   const brandName = settings.brandName || (settings as any).storeName || "Julia's • Specialty Room • Coffee • Eatery";
   const totalGrossSales = Math.round(
@@ -866,6 +879,14 @@ export const exportMasterExecutiveReportXlsx = async ({
     return cls === "HADIR" || cls === "TERLAMBAT";
   }).length;
   const attendanceRate = attendances.length > 0 ? Math.round((totalPresentLogs / attendances.length) * 100) : 100;
+  const masterRevBreakdown = computeRevenueCategoryBreakdown({
+    cashTransactions: finance,
+    expenseCategories,
+    salesTransactions: sales,
+    products,
+    recognizedSalesTotal: totalNetSales,
+    period: "ALL",
+  });
 
   const storeSlug = brandName.replace(/[^a-zA-Z0-9]+/g, "_");
   const periodSlug = periodLabel.replace(/\s+/g, "_");
@@ -926,6 +947,31 @@ export const exportMasterExecutiveReportXlsx = async ({
           Math.round(Number(f.amount) || 0),
         ]),
         columnFormats: ["integer", "date", "text", "text", "text", "currency"],
+      },
+      {
+        name: "Rincian Pendapatan",
+        title: "Rincian Pendapatan per Divisi & Kategori",
+        subtitle: `Periode: ${periodLabel} • Sumber: ${
+          masterRevBreakdown.breakdownSource === "PRODUCT_DIVISION"
+            ? "Pecahan Divisi Produk"
+            : "Buku Kas & Rekap"
+        }`,
+        headers: ["Kategori / Divisi Pendapatan", "Jenis", "Jumlah Transaksi", "Total Nominal (Rp)", "Kontribusi (%)"],
+        rows: masterRevBreakdown.rows.map((r) => [
+          r.name,
+          r.isSales ? "Penjualan" : "Pendapatan Lain",
+          r.txCount,
+          r.amount,
+          `${r.sharePercent.toFixed(1)}%`,
+        ]),
+        columnFormats: ["text", "text", "integer", "currency", "text"],
+        totalRow: [
+          "TOTAL PENDAPATAN",
+          "",
+          masterRevBreakdown.rows.reduce((s, r) => s + r.txCount, 0),
+          masterRevBreakdown.totalRevenueCashIn,
+          masterRevBreakdown.totalRevenueCashIn > 0 ? "100.0%" : "0.0%",
+        ],
       },
       {
         name: "Stok Bahan (Inventory)",
